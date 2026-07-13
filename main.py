@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import random
 import urllib.parse
 import xml.etree.ElementTree as ET
 import feedparser
@@ -145,25 +146,56 @@ GEMINI_RETRY_WAIT_SECONDS = 20
 # 各APIコールの間に空けるインターバル（レートリミット予防）
 API_CALL_INTERVAL_SECONDS = 4
 
-# 競技カテゴリごとのVOD・配信サービス広告（ad-sectionに表示するリンク）
-VOD_ADS = {
-    "SOCCER": '<a href="https://a8.net...">【DAZN】海外サッカーを見るならこちら</a>',
-    "BASEBALL": '<a href="https://a8.net...">【DAZN】メジャー・プロ野球の生中継はこちら</a>',
-    "BASKETBALL": '<a href="https://a8.net...">【DAZN】NBA・Bリーグの生中継はこちら</a>',
-    "WRESTLING": '<a href="https://a8.net...">【ABEMA/WWE Network】プロレス配信はこちら</a>',
-    "COMBAT_SPORTS": '<a href="https://a8.net...">【U-NEXT】UFC・RIZIN配信はこちら</a>',
-    "BOXING": '<a href="https://a8.net...">【U-NEXT】世界戦のライブ配信はこちら</a>',
-    "VOLLEYBALL": '<a href="https://a8.net...">【DAZN】バレーボール中継はこちら</a>',
-    "AMERICAN_FOOTBALL": '<a href="https://a8.net...">【DAZN】NFL生中継はこちら</a>',
-    "ICE_HOCKEY": '<a href="https://a8.net...">【DAZN】NHL生中継はこちら</a>',
-    "RUGBY": '<a href="https://a8.net...">【DAZN】ラグビー中継はこちら</a>',
-    "CRICKET": '<a href="https://a8.net...">【配信サービス】クリケット中継はこちら</a>',
-    "MOTORSPORT": '<a href="https://a8.net...">【DAZN】F1・MotoGP生中継はこちら</a>',
-    "OTHER": '<a href="https://a8.net...">【注目】人気のスポーツ配信サービスはこちら</a>',
+# 競技カテゴリごとのA8.net広告（ad-sectionに表示するリンク）
+# ※ Amazon/楽天は未提携のため撤去し、A8.net一本化。
+# ※ 各カテゴリはリスト形式：複数のA8案件（即時提携のものを推奨）を登録しておくと、
+#    投稿のたびにランダムでローテーション表示され、自動でA/Bテストになる。
+#    1件だけ登録した場合は常にその広告が使われる（従来と同じ挙動）。
+# ※ URLは実際にA8.netの管理画面で発行した「素材コード（aタグ）」のhref部分に差し替えること。
+AFFILIATE_ADS = {
+    "SOCCER": [
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】海外サッカーを見るならこちら</a>',
+    ],
+    "BASEBALL": [
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】メジャー・プロ野球の生中継はこちら</a>',
+    ],
+    "BASKETBALL": [
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NBA・Bリーグの生中継はこちら</a>',
+    ],
+    "WRESTLING": [
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-ABEMA" target="_blank" rel="nofollow noopener">【ABEMA】プロレス配信はこちら</a>',
+    ],
+    "COMBAT_SPORTS": [
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-UNEXT" target="_blank" rel="nofollow noopener">【U-NEXT】UFC・RIZIN配信はこちら</a>',
+    ],
+    "BOXING": [
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-UNEXT" target="_blank" rel="nofollow noopener">【U-NEXT】世界戦のライブ配信はこちら</a>',
+    ],
+    "VOLLEYBALL": [
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】バレーボール中継はこちら</a>',
+    ],
+    "AMERICAN_FOOTBALL": [
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NFL生中継はこちら</a>',
+    ],
+    "ICE_HOCKEY": [
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NHL生中継はこちら</a>',
+    ],
+    "RUGBY": [
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】ラグビー中継はこちら</a>',
+    ],
+    "CRICKET": [
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-VOD" target="_blank" rel="nofollow noopener">【配信サービス】クリケット中継はこちら</a>',
+    ],
+    "MOTORSPORT": [
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】F1・MotoGP生中継はこちら</a>',
+    ],
+    "OTHER": [
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-VOD" target="_blank" rel="nofollow noopener">【注目】人気のスポーツ配信サービスはこちら</a>',
+    ],
 }
 
 # GeminiのCATEGORY選択肢
-CATEGORY_LIST_TEXT = ", ".join(list(VOD_ADS.keys()))
+CATEGORY_LIST_TEXT = ", ".join(list(AFFILIATE_ADS.keys()))
 
 # ライブドアブログの記事カテゴリとして登録する日本語ラベル
 # （AtomPubは存在しないカテゴリ名を投稿すると自動で新規作成してくれる）
@@ -348,7 +380,7 @@ def parse_ai_output(output_text):
             # 先頭の「・」を取り除いた文章だけをリストに追加する（HTMLの<li>にそのまま入れるため）
             summary_lines.append(line.strip().lstrip("・").strip())
 
-    if category not in VOD_ADS:
+    if category not in AFFILIATE_ADS:
         category = "OTHER"
 
     if player_name in ("", "不明", "None"):
@@ -361,17 +393,12 @@ def build_blog_body(category, player_name, summary_lines, source_url):
     """元デザイン（3行要約リスト・選手グッズ個別リンク・VOD広告）に沿った記事本文HTMLを組み立てる"""
     summary_html = "\n".join(f"            <li>{line}</li>" for line in summary_lines)
 
-    personal_ad_html = ""
-    if player_name:
-        encoded_name = urllib.parse.quote(player_name)
-        personal_ad_html = f"""
-        <div class="personal-ad-box">
-            <p>\U0001F4E3 {player_name} 選手 関連アイテム・応援グッズをチェック</p>
-            <a href="https://search.rakuten.co.jp/search/mall/{encoded_name}/" class="ad-rakuten" target="_blank" rel="nofollow noopener">楽天市場で探す</a>
-            <a href="https://www.amazon.co.jp/s?k={encoded_name}" class="ad-amazon" target="_blank" rel="nofollow noopener">Amazonで探す</a>
-        </div>"""
+    # 楽天・Amazonは現在未提携のため広告表示なし（提携完了後に再実装する）。
+    # player_nameは将来の選手別広告拡張のために引数として残してあるが、現状は未使用。
+    _ = player_name  # 現状未使用（将来の選手別A8案件マッチング用に保持）
 
-    vod_ad_html = VOD_ADS.get(category, VOD_ADS["OTHER"])
+    ad_candidates = AFFILIATE_ADS.get(category, AFFILIATE_ADS["OTHER"])
+    vod_ad_html = random.choice(ad_candidates)
 
     blog_body = f"""
     <div class="article-outer">
@@ -380,7 +407,6 @@ def build_blog_body(category, player_name, summary_lines, source_url):
 {summary_html}
             </ul>
         </div>
-        {personal_ad_html}
         <div class="ad-section">
             <div class="ad-caption">ADVERTISEMENT</div>
             {vod_ad_html}
