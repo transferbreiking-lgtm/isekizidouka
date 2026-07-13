@@ -1,4 +1,4 @@
-yamlname: Auto Sports News Bot
+name: Auto Sports News Bot
 
 on:
   schedule:
@@ -35,14 +35,3 @@ jobs:
           git config --global user.email "github-actions[bot]@github.com"
           git add processed_urls.txt
           git diff --quiet && git diff --staged --quiet || (git commit -m "Update processed_urls.txt [skip ci]" && git push)
-
-下の 「Commit changes...」 で保存する。
-
-
-続けて main.py の中身も確認してください。 おそらくこちらには逆にYAMLの中身（または空、もしくは何か別のもの）が入ってしまっている可能性があります。
-
-左サイドバーで main.py をクリックして開く。
-中身が Python コード（import os から始まって if __name__ == "__main__": で終わる、260行くらいのもの）になっているか確認する。
-もしYAMLの中身や空になっていたら、鉛筆アイコンで編集し、以前渡した 完全版のmain.pyのコード（AtomPub API版）を丸ごと貼り付けて保存してください。
-
-main.pyの中身が今どうなっているか、スクリーンショットか中身のコピーを送ってもらえれば、正しく入っているか確認します。
