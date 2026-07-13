@@ -11,62 +11,8 @@ from google import genai
 # -----------------------------------------------------------------------------
 # 巡回したいスポーツメディアのRSSフィードURLをここに設定する（巻末付録②の情報源リストを参照）
 RSS_URLS = [
-    "https://www.jleague.jp/news/",   # Jリーグ公式サイト
-    "https://www.jfa.jp/",     # 日本サッカー協会(JFA)
-    "https://web.gekisaka.jp/rsspage",     # ゲキサカ
-    "https://www.soccer-king.jp/",     # サッカーキング
-    "https://www.footballchannel.jp/",     # フットボールチャンネル
-    "https://soccer.yahoo.co.jp/",     # スポーツナビサッカー
-    "https://number.bunshun.jp/list/soccer",     # Number Web サッカー
-    "https://www.fifa.com/",     # FIFA
-    "https://www.uefa.com/",     # UEFA
-    "https://www.premierleague.com/",     # プレミアリーグ
-    "https://www.laliga.com/",     # ラ・リーガ
-    "https://www.bundesliga.com/",     # ブンデスリーガ
-    "https://www.legaseriea.it/",     # セリアA
-    "https://www.ligue1.com/",     # リーグアン
-    "https://www.goal.com/",     # Goal.com
-    "https://www.espn.com/soccer/",     # ESPN Soccer
-    "https://www.bbc.com/sport/football",     # BBC Sport Football
-    "https://www.skysports.com/football",     # Sky Sports Football
-    "https://www.njpw.co.jp/news",     # 新日本プロレス
-    "https://www.all-japan.co.jp/",     # 全日本プロレス
-    "https://www.noah-gtv.com/",     # ノア
-    "https://www.ddtpro.com/",     # DDT
-    "https://www.tokyo-sports.co.jp/list/prowrestling/njpw",     # 東スポ
-    "https://www.daily.co.jp/ring/njpw/",     # デイリー
-    "https://www.weeklypuroresu.com/",     # 週プロ
-    "https://www.wwe.com/",     # WWE
-    "https://www.allelitewrestling.com/",     # AEW
-    "https://www.impactwrestling.com/",     # Impact Wrestling
-    "https://www.pwinsider.com/",     # PWInsider
-    "https://www.f4wonline.com/",     # Wrestling Observer
-    "https://www.fightful.com/",     # Fightful
-    "https://npb.jp/news/",     # NPB
-    "https://npb.jp/news/teamnews_all.html",     # 12球団ニュース
-    "https://full-count.jp/",     # Full-Count
-    "https://baseball.yahoo.co.jp/",     # スポーツナビ 野球
-    "https://www.nikkansports.com/baseball/",     # 日刊スポーツ 野球
-    "https://www.sponichi.co.jp/baseball/",     # スポニチ 野球
-    "https://www.mlb.com/",     # MLB
-    "https://www.espn.com/mlb/",     # ESPN MLB
-    "https://www.mlbtraderumors.com/",     # MLB Trade Rumors
-    "https://theathletic.com/mlb/",     # The Athletic MLB
-    "https://www.bleague.jp/news/",     # B.LEAGUE
-    "https://www.bleague.jp/rss_list/",     # Bリーグ RSS
-    "https://www.japanbasketball.jp/",     # 日本バスケットボール協会
-    "https://www.basketballking.jp/",     # バスケットボールキング
-    "https://sports.yahoo.co.jp/basket/bleague",     # スポーツナビ バスケ
-    "https://www.nba.com/",     # NBA
-    "https://www.fiba.basketball/",     # FIBA
-    "https://www.espn.com/nba/",     # ESPN NBA
-    "https://theathletic.com/nba/",     # The Athletic NBA
-    "https://hoopshype.com/",     # HoopsHype
-    "https://www.svleague.jp/",     # SVリーグ
-    "https://www.jva.or.jp/",     # 日本バレーボール協会(JVA)
-    "https://volleyballking.jp/news/",     # バレーボールキング
-    "https://vbm.link/",     # バレーボールマガジン
-    "https://www.getsuvolley.com/",     # 月バレ.com
+    "https://example.com/rss/baseball",   # 例：野球ニュースのRSS
+    "https://example.com/rss/soccer",     # 例：サッカーニュースのRSS
 ]
 DB_FILE = "processed_urls.txt"
 
