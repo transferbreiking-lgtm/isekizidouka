@@ -136,7 +136,6 @@ LIVEDOOR_BLOG_ID = os.environ.get("LIVEDOOR_BLOG_ID")
 LIVEDOOR_API_KEY = os.environ.get("LIVEDOOR_API_KEY")
 
 # OpenRouterのフォールバック先モデル（無料枠モデル）
-# 最新の無料モデル一覧は https://openrouter.ai/models?max_price=0 で確認・変更可能
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324:free")
 
 # Gemini呼び出しのリトライ設定
@@ -146,25 +145,25 @@ GEMINI_RETRY_WAIT_SECONDS = 20
 # 各APIコールの間に空けるインターバル（レートリミット予防）
 API_CALL_INTERVAL_SECONDS = 4
 
-# 各カテゴリに対応するアフィリエイト広告（A8.net等のバナー・テキストHTMLコード）
-AFFILIATE_ADS = {
-    "SOCCER": '<p><a href="https://a8.net...">【サッカー】ユニフォーム・観戦チケットはこちら</a></p>',
-    "BASEBALL": '<p><a href="https://a8.net...">【プロ野球】関連グッズや配信サービスはこちら</a></p>',
-    "BASKETBALL": '<p><a href="https://a8.net...">【バスケ】観戦チケット・グッズはこちら</a></p>',
-    "WRESTLING": '<p><a href="https://a8.net...">【プロレス】チケット・配信サービスはこちら</a></p>',
-    "COMBAT_SPORTS": '<p><a href="https://a8.net...">【格闘技】配信・チケットはこちら</a></p>',
-    "BOXING": '<p><a href="https://a8.net...">【ボクシング】観戦チケット・配信はこちら</a></p>',
-    "VOLLEYBALL": '<p><a href="https://a8.net...">【バレーボール】観戦チケットはこちら</a></p>',
-    "AMERICAN_FOOTBALL": '<p><a href="https://a8.net...">【NFL】観戦グッズ・配信はこちら</a></p>',
-    "ICE_HOCKEY": '<p><a href="https://a8.net...">【アイスホッケー】観戦グッズはこちら</a></p>',
-    "RUGBY": '<p><a href="https://a8.net...">【ラグビー】観戦チケットはこちら</a></p>',
-    "CRICKET": '<p><a href="https://a8.net...">【クリケット】配信サービスはこちら</a></p>',
-    "MOTORSPORT": '<p><a href="https://a8.net...">【モータースポーツ】観戦・グッズはこちら</a></p>',
-    "OTHER": '<p><a href="https://a8.net...">【注目】人気のスポーツ関連ショップはこちら</a></p>',
+# 競技カテゴリごとのVOD・配信サービス広告（ad-sectionに表示するリンク）
+VOD_ADS = {
+    "SOCCER": '<a href="https://a8.net...">【DAZN】海外サッカーを見るならこちら</a>',
+    "BASEBALL": '<a href="https://a8.net...">【DAZN】メジャー・プロ野球の生中継はこちら</a>',
+    "BASKETBALL": '<a href="https://a8.net...">【DAZN】NBA・Bリーグの生中継はこちら</a>',
+    "WRESTLING": '<a href="https://a8.net...">【ABEMA/WWE Network】プロレス配信はこちら</a>',
+    "COMBAT_SPORTS": '<a href="https://a8.net...">【U-NEXT】UFC・RIZIN配信はこちら</a>',
+    "BOXING": '<a href="https://a8.net...">【U-NEXT】世界戦のライブ配信はこちら</a>',
+    "VOLLEYBALL": '<a href="https://a8.net...">【DAZN】バレーボール中継はこちら</a>',
+    "AMERICAN_FOOTBALL": '<a href="https://a8.net...">【DAZN】NFL生中継はこちら</a>',
+    "ICE_HOCKEY": '<a href="https://a8.net...">【DAZN】NHL生中継はこちら</a>',
+    "RUGBY": '<a href="https://a8.net...">【DAZN】ラグビー中継はこちら</a>',
+    "CRICKET": '<a href="https://a8.net...">【配信サービス】クリケット中継はこちら</a>',
+    "MOTORSPORT": '<a href="https://a8.net...">【DAZN】F1・MotoGP生中継はこちら</a>',
+    "OTHER": '<a href="https://a8.net...">【注目】人気のスポーツ配信サービスはこちら</a>',
 }
 
-# GeminiのCATEGORY選択肢（AFFILIATE_ADSのキーと一致させる）
-CATEGORY_LIST_TEXT = ", ".join(list(AFFILIATE_ADS.keys()))
+# GeminiのCATEGORY選択肢
+CATEGORY_LIST_TEXT = ", ".join(list(VOD_ADS.keys()))
 
 
 # -----------------------------------------------------------------------------
@@ -215,6 +214,7 @@ def build_prompt(title, summary_text):
 
 ■ 出力フォーマット
 CATEGORY: [{CATEGORY_LIST_TEXT} のいずれかから、最も近いものを選んでください]
+PLAYER_NAME: [ニュースの中心となる選手名を1名だけ、フルネームで記載してください。チーム全体の話題などで個人名が特定できない場合は「不明」と記載してください]
 TITLE: [元記事とは全く違う、ファンが読みたくなるキャッチーなオリジナル独自タイトル]
 SUMMARY:
 ・【公式発表の事実】（移籍先、契約年数、移籍金など、ニュースから読み取れる客観的な事実データを1行で記述）
@@ -308,10 +308,11 @@ def check_and_summarize_with_gemini(title, summary_text):
     return res_text
 
 
-def parse_gemini_output(output_text):
-    """AIの出力テキストからカテゴリ・タイトル・要約を分解・抽出する"""
+def parse_ai_output(output_text):
+    """AIの出力テキストからカテゴリ・選手名・タイトル・要約(箇条書きリスト)を分解・抽出する"""
     lines = output_text.split("\n")
     category = "OTHER"
+    player_name = ""
     title = ""
     summary_lines = []
     is_summary = False
@@ -319,18 +320,61 @@ def parse_gemini_output(output_text):
     for line in lines:
         if line.startswith("CATEGORY:"):
             category = line.replace("CATEGORY:", "").strip()
+        elif line.startswith("PLAYER_NAME:"):
+            player_name = line.replace("PLAYER_NAME:", "").strip()
         elif line.startswith("TITLE:"):
             title = line.replace("TITLE:", "").strip()
         elif line.startswith("SUMMARY:"):
             is_summary = True
         elif is_summary and line.strip().startswith("・"):
-            summary_lines.append(line.strip())
+            # 先頭の「・」を取り除いた文章だけをリストに追加する（HTMLの<li>にそのまま入れるため）
+            summary_lines.append(line.strip().lstrip("・").strip())
 
-    if category not in AFFILIATE_ADS:
+    if category not in VOD_ADS:
         category = "OTHER"
 
-    summary_html = "<br>".join(summary_lines)
-    return category, title, summary_html
+    if player_name in ("", "不明", "None"):
+        player_name = None
+
+    return category, player_name, title, summary_lines
+
+
+def build_blog_body(category, player_name, summary_lines, source_url):
+    """元デザイン（3行要約リスト・選手グッズ個別リンク・VOD広告）に沿った記事本文HTMLを組み立てる"""
+    summary_html = "\n".join(f"            <li>{line}</li>" for line in summary_lines)
+
+    personal_ad_html = ""
+    if player_name:
+        encoded_name = urllib.parse.quote(player_name)
+        personal_ad_html = f"""
+        <div class="personal-ad-box">
+            <p>\U0001F4E3 {player_name} 選手 関連アイテム・応援グッズをチェック</p>
+            <a href="https://search.rakuten.co.jp/search/mall/{encoded_name}/" class="ad-rakuten" target="_blank" rel="nofollow noopener">楽天市場で探す</a>
+            <a href="https://www.amazon.co.jp/s?k={encoded_name}" class="ad-amazon" target="_blank" rel="nofollow noopener">Amazonで探す</a>
+        </div>"""
+
+    vod_ad_html = VOD_ADS.get(category, VOD_ADS["OTHER"])
+
+    blog_body = f"""
+    <div class="article-outer">
+        <div class="article-body">
+            <ul class="summary-list">
+{summary_html}
+            </ul>
+        </div>
+        {personal_ad_html}
+        <div class="ad-section">
+            <div class="ad-caption">ADVERTISEMENT</div>
+            {vod_ad_html}
+        </div>
+        <p><small style="color: #999999; display: block; margin-top: 30px; font-size: 12px;">
+            ※本記事は公式発表の事実データをもとに独自の解説を加えたものです。<br>
+            ニュースの完全な詳細は、以下の情報元メディアにてご確認ください。<br>
+            情報元URL: <a href="{source_url}" target="_blank" rel="nofollow noopener">{source_url}</a>
+        </small></p>
+    </div>
+    """
+    return blog_body
 
 
 def send_to_blog(subject, body_html, publish=True):
@@ -414,24 +458,15 @@ def main():
                 save_processed_url(url)
                 continue
 
-            category, blog_title, blog_summary = parse_gemini_output(raw_output)
+            category, player_name, blog_title, summary_lines = parse_ai_output(raw_output)
             if not blog_title:
                 blog_title = entry.title
+            if not summary_lines:
+                print("要約の抽出に失敗したためスキップします。")
+                save_processed_url(url)
+                continue
 
-            ad_html = AFFILIATE_ADS.get(category, AFFILIATE_ADS["OTHER"])
-
-            # ▼▼▼ スタイル(インラインCSS)はこのブロック内にあります ▼▼▼
-            blog_body = f"""
-            <div>
-                <h3>【独自解説コラム】</h3>
-                <p>{blog_summary}</p>
-                <hr>
-                {ad_html}
-                <br>
-                <p><small style="color: #666;">※本記事は公式発表の事実データをもとに独自の解説を加えたものです。<br>ニュースの完全な詳細は、以下の情報元メディアにてご確認ください。<br>情報元URL: <a href="{url}" target="_blank">{url}</a></small></p>
-            </div>
-            """
-            # ▲▲▲ スタイル(インラインCSS)ここまで ▲▲▲
+            blog_body = build_blog_body(category, player_name, summary_lines, url)
 
             success = send_to_blog(blog_title, blog_body, publish=True)
             if success:
