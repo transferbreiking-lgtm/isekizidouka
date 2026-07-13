@@ -137,7 +137,10 @@ LIVEDOOR_BLOG_ID = os.environ.get("LIVEDOOR_BLOG_ID")
 LIVEDOOR_API_KEY = os.environ.get("LIVEDOOR_API_KEY")
 
 # OpenRouterのフォールバック先モデル（無料枠モデル）
-OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324:free")
+# ※ deepseek/deepseek-chat-v3-0324:free は2026年7月時点で無料枠が廃止され有料化された。
+#    OpenRouterの無料モデルは入れ替わりが激しいので、時々 https://openrouter.ai/models?max_price=0 で
+#    現行の無料ラインナップを確認し、必要ならここを更新すること。
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
 
 # Gemini呼び出しのリトライ設定
 GEMINI_MAX_RETRIES = 3
@@ -288,7 +291,7 @@ def call_gemini_with_retry(prompt):
     for attempt in range(1, GEMINI_MAX_RETRIES + 1):
         try:
             response = client.models.generate_content(
-                model="gemini-1.5-flash",
+                model="gemini-flash-latest",
                 contents=prompt,
             )
             return response.text.strip()
@@ -520,7 +523,7 @@ def main():
 
             blog_body = build_blog_body(category, player_name, summary_lines, url)
 
-            success = send_to_blog(blog_title, blog_body, category, publish=False)
+            success = send_to_blog(blog_title, blog_body, category, publish=True)
             if success:
                 save_processed_url(url)
                 print("1件の配信処理が正常終了したため、スクリプトを終了します。")
