@@ -520,7 +520,7 @@ def main():
 
             blog_body = build_blog_body(category, player_name, summary_lines, url)
 
-            success = send_to_blog(blog_title, blog_body, category, publish=True)
+            success = send_to_blog(blog_title, blog_body, category, publish=False)
             if success:
                 save_processed_url(url)
                 print("1件の配信処理が正常終了したため、スクリプトを終了します。")
