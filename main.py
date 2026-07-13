@@ -1,5 +1,6 @@
 import os
 import sys
+import urllib.parse
 import xml.etree.ElementTree as ET
 import feedparser
 import requests
@@ -9,83 +10,177 @@ from google import genai
 # -----------------------------------------------------------------------------
 # 1. 設定・環境変数
 # -----------------------------------------------------------------------------
-# 巡回したいスポーツメディアのRSSフィードURLをここに設定する（巻末付録②の情報源リストを参照）
+# ① 検証済みの公式RSSフィード（そのまま使えるURL）
 RSS_URLS = [
-    "https://www.jleague.jp/news/",   # Jリーグ公式サイト
-    "https://www.jfa.jp/",     # 日本サッカー協会(JFA)
-    "https://web.gekisaka.jp/rsspage",     # ゲキサカ
-    "https://www.soccer-king.jp/",     # サッカーキング
-    "https://www.footballchannel.jp/",     # フットボールチャンネル
-    "https://soccer.yahoo.co.jp/",     # スポーツナビサッカー
-    "https://number.bunshun.jp/list/soccer",     # Number Web サッカー
-    "https://www.fifa.com/",     # FIFA
-    "https://www.uefa.com/",     # UEFA
-    "https://www.premierleague.com/",     # プレミアリーグ
-    "https://www.laliga.com/",     # ラ・リーガ
-    "https://www.bundesliga.com/",     # ブンデスリーガ
-    "https://www.legaseriea.it/",     # セリアA
-    "https://www.ligue1.com/",     # リーグアン
-    "https://www.goal.com/",     # Goal.com
-    "https://www.espn.com/soccer/",     # ESPN Soccer
-    "https://www.bbc.com/sport/football",     # BBC Sport Football
-    "https://www.skysports.com/football",     # Sky Sports Football
-    "https://www.njpw.co.jp/news",     # 新日本プロレス
-    "https://www.all-japan.co.jp/",     # 全日本プロレス
-    "https://www.noah-gtv.com/",     # ノア
-    "https://www.ddtpro.com/",     # DDT
-    "https://www.tokyo-sports.co.jp/list/prowrestling/njpw",     # 東スポ
-    "https://www.daily.co.jp/ring/njpw/",     # デイリー
-    "https://www.weeklypuroresu.com/",     # 週プロ
-    "https://www.wwe.com/",     # WWE
-    "https://www.allelitewrestling.com/",     # AEW
-    "https://www.impactwrestling.com/",     # Impact Wrestling
-    "https://www.pwinsider.com/",     # PWInsider
-    "https://www.f4wonline.com/",     # Wrestling Observer
-    "https://www.fightful.com/",     # Fightful
-    "https://npb.jp/news/",     # NPB
-    "https://npb.jp/news/teamnews_all.html",     # 12球団ニュース
-    "https://full-count.jp/",     # Full-Count
-    "https://baseball.yahoo.co.jp/",     # スポーツナビ 野球
-    "https://www.nikkansports.com/baseball/",     # 日刊スポーツ 野球
-    "https://www.sponichi.co.jp/baseball/",     # スポニチ 野球
-    "https://www.mlb.com/",     # MLB
-    "https://www.espn.com/mlb/",     # ESPN MLB
-    "https://www.mlbtraderumors.com/",     # MLB Trade Rumors
-    "https://theathletic.com/mlb/",     # The Athletic MLB
-    "https://www.bleague.jp/news/",     # B.LEAGUE
-    "https://www.bleague.jp/rss_list/",     # Bリーグ RSS
-    "https://www.japanbasketball.jp/",     # 日本バスケットボール協会
-    "https://www.basketballking.jp/",     # バスケットボールキング
-    "https://sports.yahoo.co.jp/basket/bleague",     # スポーツナビ バスケ
-    "https://www.nba.com/",     # NBA
-    "https://www.fiba.basketball/",     # FIBA
-    "https://www.espn.com/nba/",     # ESPN NBA
-    "https://theathletic.com/nba/",     # The Athletic NBA
-    "https://hoopshype.com/",     # HoopsHype
-    "https://www.svleague.jp/",     # SVリーグ
-    "https://www.jva.or.jp/",     # 日本バレーボール協会(JVA)
-    "https://volleyballking.jp/news/",     # バレーボールキング
-    "https://vbm.link/",     # バレーボールマガジン
-    "https://www.getsuvolley.com/",     # 月バレ.com
+    "https://web.gekisaka.jp/feed",                        # ゲキサカ 全体
+    "https://web.gekisaka.jp/feed?category=nationalteam",  # ゲキサカ 日本代表
+    "https://web.gekisaka.jp/feed?category=domestic",      # ゲキサカ Jリーグ・国内
+    "https://web.gekisaka.jp/feed?category=youth",         # ゲキサカ 高校&大学
+    "https://web.gekisaka.jp/feed?category=foreign",       # ゲキサカ 海外サッカー
+    "https://feeds.bbci.co.uk/sport/football/rss.xml",     # BBC Sport Football
+    "https://www.mlbtraderumors.com/feed",                 # MLB Trade Rumors
 ]
+
+# ② Google Newsキーワード検索RSS（世界中のプロスポーツを競技別に網羅）
+#    「移籍・契約」が実際に発生する team-based / 個人契約ベースの競技を中心に構成。
+#    Yahoo!ニュースとNPB.jpは方針により除外(-site:)している。
+SPORT_QUERIES = {
+    "SOCCER": [
+        # 国内
+        "Jリーグ 移籍 -site:yahoo.co.jp",
+        "なでしこジャパン WEリーグ 移籍 -site:yahoo.co.jp",
+        "日本代表 サッカー 移籍 -site:yahoo.co.jp",
+        # 欧州5大リーグ
+        "プレミアリーグ 移籍 -site:yahoo.co.jp",
+        "ラ・リーガ 移籍 -site:yahoo.co.jp",
+        "セリエA サッカー 移籍 -site:yahoo.co.jp",
+        "ブンデスリーガ 移籍 -site:yahoo.co.jp",
+        "リーグアン 移籍 -site:yahoo.co.jp",
+        # 欧州その他
+        "エールディビジ 移籍 -site:yahoo.co.jp",
+        "プリメイラリーガ ポルトガル 移籍 -site:yahoo.co.jp",
+        "ベルギーリーグ サッカー 移籍 -site:yahoo.co.jp",
+        "スコティッシュプレミアシップ 移籍 -site:yahoo.co.jp",
+        "トルコ スュペルリグ 移籍 -site:yahoo.co.jp",
+        # 南北米
+        "MLS サッカー 移籍 -site:yahoo.co.jp",
+        "ブラジル セリエA サッカー 移籍 -site:yahoo.co.jp",
+        "アルゼンチン リーガプロフェシオナル 移籍 -site:yahoo.co.jp",
+        # アジア・中東・オセアニア
+        "サウジプロリーグ 移籍 -site:yahoo.co.jp",
+        "Kリーグ サッカー 移籍 -site:yahoo.co.jp",
+        "中国スーパーリーグ サッカー 移籍 -site:yahoo.co.jp",
+        "Aリーグ サッカー オーストラリア 移籍 -site:yahoo.co.jp",
+        "インドスーパーリーグ 移籍 -site:yahoo.co.jp",
+        # 国際大会・移籍市場全般
+        "サッカー 移籍市場 -site:yahoo.co.jp",
+        "サッカー 移籍金 -site:yahoo.co.jp",
+    ],
+    "BASEBALL": [
+        "プロ野球 移籍 -site:yahoo.co.jp -site:npb.jp",
+        "MLB 移籍 -site:yahoo.co.jp",
+        "MLB トレード -site:yahoo.co.jp",
+        "MLB FA 契約 -site:yahoo.co.jp",
+        "韓国プロ野球 KBO 移籍 -site:yahoo.co.jp",
+        "台湾プロ野球 CPBL 移籍 -site:yahoo.co.jp",
+    ],
+    "BASKETBALL": [
+        "Bリーグ 移籍 -site:yahoo.co.jp",
+        "NBA 移籍 -site:yahoo.co.jp",
+        "NBA トレード -site:yahoo.co.jp",
+        "NBA FA 契約 -site:yahoo.co.jp",
+        "ユーロリーグ バスケ 移籍 -site:yahoo.co.jp",
+        "中国CBA バスケ 移籍 -site:yahoo.co.jp",
+    ],
+    "WRESTLING": [
+        # 国内団体
+        "新日本プロレス 移籍 -site:yahoo.co.jp",
+        "新日本プロレス 契約更改 -site:yahoo.co.jp",
+        "全日本プロレス 移籍 -site:yahoo.co.jp",
+        "プロレスリングノア 移籍 -site:yahoo.co.jp",
+        "DDTプロレス 移籍 -site:yahoo.co.jp",
+        "スターダム 女子プロレス 移籍 -site:yahoo.co.jp",
+        "女子プロレス 移籍 -site:yahoo.co.jp",
+        # 海外団体
+        "WWE 移籍 -site:yahoo.co.jp",
+        "WWE 契約 -site:yahoo.co.jp",
+        "AEW 契約 -site:yahoo.co.jp",
+        "Impact Wrestling 契約 -site:yahoo.co.jp",
+        "ROH プロレス 契約 -site:yahoo.co.jp",
+        "メキシコ CMLL ルチャリブレ 契約 -site:yahoo.co.jp",
+        "AAA ルチャリブレ 契約 -site:yahoo.co.jp",
+    ],
+    "COMBAT_SPORTS": [
+        "UFC 契約 -site:yahoo.co.jp",
+        "UFC 移籍 -site:yahoo.co.jp",
+        "Bellator MMA 契約 -site:yahoo.co.jp",
+        "ONE Championship 契約 -site:yahoo.co.jp",
+        "RIZIN 契約 -site:yahoo.co.jp",
+        "PFL MMA 契約 -site:yahoo.co.jp",
+        "修斗 契約 -site:yahoo.co.jp",
+        "K-1 契約 -site:yahoo.co.jp",
+    ],
+    "BOXING": [
+        "ボクシング 世界戦 契約 -site:yahoo.co.jp",
+        "日本ボクシング 契約 -site:yahoo.co.jp",
+        "WBA 世界タイトル 契約 -site:yahoo.co.jp",
+        "WBC 世界タイトル 契約 -site:yahoo.co.jp",
+        "IBF 世界タイトル 契約 -site:yahoo.co.jp",
+        "WBO 世界タイトル 契約 -site:yahoo.co.jp",
+        "PBC ボクシング 契約 -site:yahoo.co.jp",
+    ],
+    "VOLLEYBALL": [
+        "SVリーグ 移籍 -site:yahoo.co.jp",
+        "バレーボール 日本代表 移籍 -site:yahoo.co.jp",
+    ],
+    "AMERICAN_FOOTBALL": [
+        "NFL 移籍 -site:yahoo.co.jp",
+        "NFL トレード -site:yahoo.co.jp",
+        "NFL FA 契約 -site:yahoo.co.jp",
+    ],
+    "ICE_HOCKEY": [
+        "NHL 移籍 -site:yahoo.co.jp",
+        "NHL トレード -site:yahoo.co.jp",
+    ],
+    "RUGBY": [
+        "ラグビー 移籍 -site:yahoo.co.jp",
+        "リーグワン ラグビー 移籍 -site:yahoo.co.jp",
+        "スーパーラグビー 移籍 -site:yahoo.co.jp",
+    ],
+    "CRICKET": [
+        "IPL クリケット 移籍 -site:yahoo.co.jp",
+    ],
+    "MOTORSPORT": [
+        "F1 移籍 -site:yahoo.co.jp",
+        "MotoGP 移籍 -site:yahoo.co.jp",
+    ],
+}
+
 DB_FILE = "processed_urls.txt"
 
-# GitHub Actionsの環境変数（Secrets）から安全に読み込む
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-LIVEDOOR_BLOG_ID = os.environ.get("LIVEDOOR_BLOG_ID")   # 例: "sports-transfer-news"
-LIVEDOOR_API_KEY = os.environ.get("LIVEDOOR_API_KEY")   # AtomPub用パスワード（半角英数字10文字）
+LIVEDOOR_BLOG_ID = os.environ.get("LIVEDOOR_BLOG_ID")
+LIVEDOOR_API_KEY = os.environ.get("LIVEDOOR_API_KEY")
 
 # 各カテゴリに対応するアフィリエイト広告（A8.net等のバナー・テキストHTMLコード）
 AFFILIATE_ADS = {
-    "BASEBALL": '<p><a href="https://a8.net...">【プロ野球】関連グッズや配信サービスはこちら</a></p>',
     "SOCCER": '<p><a href="https://a8.net...">【サッカー】ユニフォーム・観戦チケットはこちら</a></p>',
+    "BASEBALL": '<p><a href="https://a8.net...">【プロ野球】関連グッズや配信サービスはこちら</a></p>',
+    "BASKETBALL": '<p><a href="https://a8.net...">【バスケ】観戦チケット・グッズはこちら</a></p>',
+    "WRESTLING": '<p><a href="https://a8.net...">【プロレス】チケット・配信サービスはこちら</a></p>',
+    "COMBAT_SPORTS": '<p><a href="https://a8.net...">【格闘技】配信・チケットはこちら</a></p>',
+    "BOXING": '<p><a href="https://a8.net...">【ボクシング】観戦チケット・配信はこちら</a></p>',
+    "VOLLEYBALL": '<p><a href="https://a8.net...">【バレーボール】観戦チケットはこちら</a></p>',
+    "AMERICAN_FOOTBALL": '<p><a href="https://a8.net...">【NFL】観戦グッズ・配信はこちら</a></p>',
+    "ICE_HOCKEY": '<p><a href="https://a8.net...">【アイスホッケー】観戦グッズはこちら</a></p>',
+    "RUGBY": '<p><a href="https://a8.net...">【ラグビー】観戦チケットはこちら</a></p>',
+    "CRICKET": '<p><a href="https://a8.net...">【クリケット】配信サービスはこちら</a></p>',
+    "MOTORSPORT": '<p><a href="https://a8.net...">【モータースポーツ】観戦・グッズはこちら</a></p>',
     "OTHER": '<p><a href="https://a8.net...">【注目】人気のスポーツ関連ショップはこちら</a></p>',
 }
+
+# GeminiのCATEGORY選択肢（AFFILIATE_ADSのキーと一致させる）
+CATEGORY_LIST_TEXT = ", ".join(list(AFFILIATE_ADS.keys()))
 
 
 # -----------------------------------------------------------------------------
 # 2. 各種処理を行う関数群
 # -----------------------------------------------------------------------------
+def build_google_news_rss(query):
+    """キーワードをGoogle Newsの検索RSS URLに変換する"""
+    encoded_query = urllib.parse.quote_plus(query)
+    return f"https://news.google.com/rss/search?q={encoded_query}&hl=ja&gl=JP&ceid=JP:ja"
+
+
+def get_all_rss_urls():
+    """公式RSS一覧 と 競技別Google Newsキーワード検索RSS一覧をまとめて返す"""
+    google_news_urls = []
+    for queries in SPORT_QUERIES.values():
+        for q in queries:
+            google_news_urls.append(build_google_news_rss(q))
+    return RSS_URLS + google_news_urls
+
+
 def load_processed_urls():
     """既読URLリストファイルを読み込み、重複排除用のセットを返す"""
     if not os.path.exists(DB_FILE):
@@ -121,7 +216,7 @@ def check_and_summarize_with_gemini(title, summary_text):
 3. 去就情報である場合は、元記事の文体や表現を絶対に流用（コピペ）せず、以下のフォーマットに則って完全オリジナル文章で出力してください。
 
 ■ 出力フォーマット
-CATEGORY: [BASEBALL, SOCCER, OTHER のいずれかから選んでください]
+CATEGORY: [{CATEGORY_LIST_TEXT} のいずれかから、最も近いものを選んでください]
 TITLE: [元記事とは全く違う、ファンが読みたくなるキャッチーなオリジナル独自タイトル]
 SUMMARY:
 ・【公式発表の事実】（移籍先、契約年数、移籍金など、ニュースから読み取れる客観的な事実データを1行で記述）
@@ -166,6 +261,9 @@ def parse_gemini_output(output_text):
             is_summary = True
         elif is_summary and line.strip().startswith("・"):
             summary_lines.append(line.strip())
+
+    if category not in AFFILIATE_ADS:
+        category = "OTHER"
 
     summary_html = "<br>".join(summary_lines)
     return category, title, summary_html
@@ -225,7 +323,10 @@ def main():
     processed_urls = load_processed_urls()
     print(f"現在の既読URL数: {len(processed_urls)}")
 
-    for rss_url in RSS_URLS:
+    all_rss_urls = get_all_rss_urls()
+    print(f"巡回対象RSS数: {len(all_rss_urls)}件（公式RSS {len(RSS_URLS)}件 + 競技別Google Newsキーワード {len(all_rss_urls) - len(RSS_URLS)}件）")
+
+    for rss_url in all_rss_urls:
         print(f"RSSフィードを巡回中: {rss_url}")
         try:
             feed = feedparser.parse(rss_url)
@@ -252,7 +353,7 @@ def main():
 
             ad_html = AFFILIATE_ADS.get(category, AFFILIATE_ADS["OTHER"])
 
-            # ▼▼▼ スタイル(インラインCSS)はこのブロック内にあります。詳細は巻末付録を参照 ▼▼▼
+            # ▼▼▼ スタイル(インラインCSS)はこのブロック内にあります ▼▼▼
             blog_body = f"""
             <div>
                 <h3>【独自解説コラム】</h3>
