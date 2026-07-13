@@ -2,8 +2,8 @@ name: Auto Sports News Bot
 
 on:
   schedule:
-    - cron: '0 * * * *'
-  workflow_dispatch:
+    - cron: '0 */2 * * *'   # 2時間おき（毎時0分、偶数時）に自動実行
+  workflow_dispatch:          # 管理画面から手動起動するためのボタン
 
 jobs:
   build:
@@ -25,6 +25,7 @@ jobs:
       - name: Run main script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           LIVEDOOR_BLOG_ID: ${{ secrets.LIVEDOOR_BLOG_ID }}
           LIVEDOOR_API_KEY: ${{ secrets.LIVEDOOR_API_KEY }}
         run: python main.py
