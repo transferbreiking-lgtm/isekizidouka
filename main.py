@@ -165,6 +165,24 @@ VOD_ADS = {
 # GeminiのCATEGORY選択肢
 CATEGORY_LIST_TEXT = ", ".join(list(VOD_ADS.keys()))
 
+# ライブドアブログの記事カテゴリとして登録する日本語ラベル
+# （AtomPubは存在しないカテゴリ名を投稿すると自動で新規作成してくれる）
+CATEGORY_LABELS = {
+    "SOCCER": "サッカー",
+    "BASEBALL": "野球",
+    "BASKETBALL": "バスケットボール",
+    "WRESTLING": "プロレス",
+    "COMBAT_SPORTS": "格闘技",
+    "BOXING": "ボクシング",
+    "VOLLEYBALL": "バレーボール",
+    "AMERICAN_FOOTBALL": "アメリカンフットボール",
+    "ICE_HOCKEY": "アイスホッケー",
+    "RUGBY": "ラグビー",
+    "CRICKET": "クリケット",
+    "MOTORSPORT": "モータースポーツ",
+    "OTHER": "スポーツ",
+}
+
 
 # -----------------------------------------------------------------------------
 # 2. 各種処理を行う関数群
@@ -377,9 +395,11 @@ def build_blog_body(category, player_name, summary_lines, source_url):
     return blog_body
 
 
-def send_to_blog(subject, body_html, publish=True):
+def send_to_blog(subject, body_html, category, publish=True):
     """AtomPub APIを使ってライブドアブログへ記事を投稿する
 
+    category      : main.py内のカテゴリコード（例: "SOCCER"）。CATEGORY_LABELSで日本語ラベルに変換して送信する。
+                     ライブドア側に同名カテゴリが無ければ自動で新規作成される。
     publish=True  : 即時公開
     publish=False : 下書き保存（動作確認したいときに使用）
     """
@@ -396,6 +416,12 @@ def send_to_blog(subject, body_html, publish=True):
 
     content_elm = ET.SubElement(entry, "content", attrib={"type": "text/html"})
     content_elm.text = body_html
+
+    category_label = CATEGORY_LABELS.get(category, CATEGORY_LABELS["OTHER"])
+    ET.SubElement(entry, "category", attrib={
+        "scheme": f"https://livedoor.blogcms.jp/atompub/{LIVEDOOR_BLOG_ID}/category",
+        "term": category_label,
+    })
 
     app_control = ET.SubElement(entry, "app:control")
     app_draft = ET.SubElement(app_control, "app:draft")
@@ -468,7 +494,7 @@ def main():
 
             blog_body = build_blog_body(category, player_name, summary_lines, url)
 
-            success = send_to_blog(blog_title, blog_body, publish=True)
+            success = send_to_blog(blog_title, blog_body, category, publish=True)
             if success:
                 save_processed_url(url)
                 print("1件の配信処理が正常終了したため、スクリプトを終了します。")
