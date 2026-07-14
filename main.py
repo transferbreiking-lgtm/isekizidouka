@@ -149,6 +149,24 @@ GEMINI_RETRY_WAIT_SECONDS = 20
 # 各APIコールの間に空けるインターバル（レートリミット予防）
 API_CALL_INTERVAL_SECONDS = 4
 
+# カテゴリ別サムネイル画像（ライブドアの「画像/ファイル」にアップロード済みのオリジナルバナー）
+# トップページ/アーカイブページの <$ArticleFirstImage$> はこの画像を自動的に拾って一覧に表示する。
+THUMBNAIL_IMAGES = {
+    "SOCCER": "https://livedoor.blogimg.jp/transfer_breiking/imgs/e/3/e3efc577.png?v=20260714184927",
+    "BASEBALL": "https://livedoor.blogimg.jp/transfer_breiking/imgs/5/9/59861768.png?v=20260714184931",
+    "BASKETBALL": "https://livedoor.blogimg.jp/transfer_breiking/imgs/a/d/ad4b6829.png?v=20260714184933",
+    "WRESTLING": "https://livedoor.blogimg.jp/transfer_breiking/imgs/3/6/361773e5.png?v=20260714184929",
+    "COMBAT_SPORTS": "https://livedoor.blogimg.jp/transfer_breiking/imgs/6/e/6e9a0cbc.png?v=20260714184935",
+    "BOXING": "https://livedoor.blogimg.jp/transfer_breiking/imgs/7/b/7b1f3b09.png?v=20260714184934",
+    "VOLLEYBALL": "https://livedoor.blogimg.jp/transfer_breiking/imgs/d/b/db9a891c.png?v=20260714184928",
+    "AMERICAN_FOOTBALL": "https://livedoor.blogimg.jp/transfer_breiking/imgs/9/e/9eab85ed.png?v=20260714184930",
+    "ICE_HOCKEY": "https://livedoor.blogimg.jp/transfer_breiking/imgs/b/a/ba80772f.png?v=20260714184937",
+    "RUGBY": "https://livedoor.blogimg.jp/transfer_breiking/imgs/e/9/e98e6d8e.png?v=20260714184940",
+    "CRICKET": "https://livedoor.blogimg.jp/transfer_breiking/imgs/0/d/0d33cd04.png?v=20260714184936",
+    "MOTORSPORT": "https://livedoor.blogimg.jp/transfer_breiking/imgs/c/6/c6b0f4d7.png?v=20260714184938",
+    "OTHER": "https://livedoor.blogimg.jp/transfer_breiking/imgs/8/6/86d93028.png?v=20260714184939",
+}
+
 # 競技カテゴリごとのA8.net広告（ad-sectionに表示するリンク）
 # ※ Amazon/楽天は未提携のため撤去し、A8.net一本化。
 # ※ 各カテゴリはリスト形式：複数のA8案件（即時提携のものを推奨）を登録しておくと、
@@ -270,9 +288,15 @@ CATEGORY: [{CATEGORY_LIST_TEXT} のいずれかから、最も近いものを選
 PLAYER_NAME: [ニュースの中心となる選手名を1名だけ、フルネームで記載してください。チーム全体の話題などで個人名が特定できない場合は「不明」と記載してください]
 TITLE: [元記事とは全く違う、ファンが読みたくなるキャッチーなオリジナル独自タイトル]
 SUMMARY:
-・【公式発表の事実】（移籍先、契約年数、移籍金など、ニュースから読み取れる客観的な事実データを1行で記述）
-・【戦力的な影響・見どころ】（この移籍によってチームがどう変わるか、どのような活躍が期待されるかをあなたの言葉で1行で解説）
-・【今後の注目ポイント】（次のシーズンや、今後のチーム編成に与える影響などをあなたの言葉で1行で解説）
+・（1行目：移籍先・契約年数・移籍金など、ニュースから読み取れる客観的な事実を自然な1文で）
+・（2行目：この移籍によってチームがどう変わるか、どのような活躍が期待されるかをあなたの言葉で自然な1文で）
+・（3行目：次のシーズンやチーム編成に与える影響など、今後の注目ポイントをあなたの言葉で自然な1文で）
+
+■ SUMMARY出力時の重要な注意
+上記の（）内は執筆の指示であり、実際の出力に含めてはいけません。
+「【公式発表の事実】」のようなラベルや見出し語を行頭に付けず、いきなり本文から書き始めてください。
+良い例：・大谷翔平選手がドジャースとの契約延長に合意したことが公式発表された。契約は3年総額1.5億ドル規模とみられる。
+悪い例：・【公式発表の事実】大谷翔平選手がドジャースとの契約延長に合意したことが公式発表された。
 
 ■ 執筆上の禁止事項
 - 元記事にある「～と語った」「～という」などの語尾や、文章のつながり（構成）をそのまま真似してはいけません。
@@ -403,8 +427,11 @@ def build_blog_body(category, player_name, summary_lines, source_url):
     ad_candidates = AFFILIATE_ADS.get(category, AFFILIATE_ADS["OTHER"])
     vod_ad_html = random.choice(ad_candidates)
 
+    thumbnail_url = THUMBNAIL_IMAGES.get(category, THUMBNAIL_IMAGES["OTHER"])
+
     blog_body = f"""
     <div class="article-outer">
+        <img src="{thumbnail_url}" alt="{category}" class="article-thumbnail" />
         <div class="article-body">
             <ul class="summary-list">
 {summary_html}
