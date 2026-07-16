@@ -151,64 +151,76 @@ API_CALL_INTERVAL_SECONDS = 4
 
 # カテゴリ別サムネイル画像（ライブドアの「画像/ファイル」にアップロード済みのオリジナルバナー）
 # トップページ/アーカイブページの <$ArticleFirstImage$> はこの画像を自動的に拾って一覧に表示する。
+# ※ 2026年7月版バナーに差し替え済み（フルサイズURL。-s付きはサムネイル版なのでここでは使わない）。
 THUMBNAIL_IMAGES = {
-    "SOCCER": "https://livedoor.blogimg.jp/transfer_breiking/imgs/3/2/32cd95e7.png",
-    "BASEBALL": "https://livedoor.blogimg.jp/transfer_breiking/imgs/d/0/d07f9b3f.png",
-    "BASKETBALL": "https://livedoor.blogimg.jp/transfer_breiking/imgs/b/0/b0261d62.png",
-    "WRESTLING": "https://livedoor.blogimg.jp/transfer_breiking/imgs/0/f/0f3ca4ad.png",
-    "COMBAT_SPORTS": "https://livedoor.blogimg.jp/transfer_breiking/imgs/a/e/aebfdd3c.png",
-    "BOXING": "https://livedoor.blogimg.jp/transfer_breiking/imgs/3/f/3f5f2a12.png",
-    "VOLLEYBALL": "https://livedoor.blogimg.jp/transfer_breiking/imgs/e/e/eed425f3.png",
-    "AMERICAN_FOOTBALL": "https://livedoor.blogimg.jp/transfer_breiking/imgs/0/9/09fb0c9c.png",
-    "ICE_HOCKEY": "https://livedoor.blogimg.jp/transfer_breiking/imgs/e/b/ebee635f.png",
-    "RUGBY": "https://livedoor.blogimg.jp/transfer_breiking/imgs/a/8/a8c8ab87.png",
-    "CRICKET": "https://livedoor.blogimg.jp/transfer_breiking/imgs/5/8/58d3dfee.png",
-    "MOTORSPORT": "https://livedoor.blogimg.jp/transfer_breiking/imgs/7/a/7a78b165.png",
-    "OTHER": "https://livedoor.blogimg.jp/transfer_breiking/imgs/7/7/77069b93.png",
+    "SOCCER": "https://livedoor.blogimg.jp/transfer_breiking/imgs/c/c/ccae064b.png",
+    "BASEBALL": "https://livedoor.blogimg.jp/transfer_breiking/imgs/1/5/153f160a.png",
+    "BASKETBALL": "https://livedoor.blogimg.jp/transfer_breiking/imgs/4/1/41690533.jpg",
+    "WRESTLING": "https://livedoor.blogimg.jp/transfer_breiking/imgs/f/3/f3cac0f0.png",
+    "COMBAT_SPORTS": "https://livedoor.blogimg.jp/transfer_breiking/imgs/8/a/8ad16465.png",
+    "BOXING": "https://livedoor.blogimg.jp/transfer_breiking/imgs/5/9/59372024.png",
+    "VOLLEYBALL": "https://livedoor.blogimg.jp/transfer_breiking/imgs/b/f/bf2b7310.jpg",
+    "AMERICAN_FOOTBALL": "https://livedoor.blogimg.jp/transfer_breiking/imgs/7/7/7728614a.jpg",
+    "ICE_HOCKEY": "https://livedoor.blogimg.jp/transfer_breiking/imgs/0/7/074b7ad7.jpg",
+    "RUGBY": "https://livedoor.blogimg.jp/transfer_breiking/imgs/7/2/725eb216.png",
+    "CRICKET": "https://livedoor.blogimg.jp/transfer_breiking/imgs/f/6/f67875e2.jpg",
+    "MOTORSPORT": "https://livedoor.blogimg.jp/transfer_breiking/imgs/a/b/ab625684.jpg",
+    "OTHER": "https://livedoor.blogimg.jp/transfer_breiking/imgs/0/f/0f2ab819.jpg",
 }
 
-# 競技カテゴリごとのA8.net広告（ad-sectionに表示するリンク）
-# ※ Amazon/楽天は未提携のため撤去し、A8.net一本化。
-# ※ 各カテゴリはリスト形式：複数のA8案件（即時提携のものを推奨）を登録しておくと、
-#    投稿のたびにランダムでローテーション表示され、自動でA/Bテストになる。
-#    1件だけ登録した場合は常にその広告が使われる（従来と同じ挙動）。
-# ※ URLは実際にA8.netの管理画面で発行した「素材コード（aタグ）」のhref部分に差し替えること。
+# 競技カテゴリごとのアフィリエイト広告（ad-sectionに表示するリンク）
+# ※ 複数ASPを混在させる場合も、リスト内にHTMLリンク文字列をそのまま追加すればよい
+#    （投稿のたびに random.choice でランダムローテーションされ、自動でA/Bテストになる）。
+# ※ A8.netにはDAZN・U-NEXTの取り扱いがないため、DAZN案件はアクセストレード、
+#    U-NEXT案件はバリューコマースで別途提携し、そのリンクをここに追加している。
+# ※ 下記の "XXXXXX" 部分は全てプレースホルダー。各ASPの管理画面で発行した
+#    実際の素材コード（rk=... / sid=...&pid=... 等）に差し替えること。
 AFFILIATE_ADS = {
     "SOCCER": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】海外サッカーを見るならこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】海外サッカーを見るならこちら</a>',
     ],
     "BASEBALL": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】メジャー・プロ野球の生中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】メジャー・プロ野球の生中継はこちら</a>',
     ],
     "BASKETBALL": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NBA・Bリーグの生中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NBA・Bリーグの生中継はこちら</a>',
     ],
     "WRESTLING": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-ABEMA" target="_blank" rel="nofollow noopener">【ABEMA】プロレス配信はこちら</a>',
     ],
     "COMBAT_SPORTS": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-UNEXT" target="_blank" rel="nofollow noopener">【U-NEXT】UFC・RIZIN配信はこちら</a>',
+        '<a href="https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=XXXXXX&pid=XXXXXX-UNEXT" target="_blank" rel="nofollow noopener">【U-NEXT】UFC・RIZIN配信はこちら</a>',
     ],
     "BOXING": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-UNEXT" target="_blank" rel="nofollow noopener">【U-NEXT】世界戦のライブ配信はこちら</a>',
+        '<a href="https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=XXXXXX&pid=XXXXXX-UNEXT" target="_blank" rel="nofollow noopener">【U-NEXT】世界戦のライブ配信はこちら</a>',
     ],
     "VOLLEYBALL": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】バレーボール中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】バレーボール中継はこちら</a>',
     ],
     "AMERICAN_FOOTBALL": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NFL生中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NFL生中継はこちら</a>',
     ],
     "ICE_HOCKEY": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NHL生中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NHL生中継はこちら</a>',
     ],
     "RUGBY": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】ラグビー中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】ラグビー中継はこちら</a>',
     ],
     "CRICKET": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-VOD" target="_blank" rel="nofollow noopener">【配信サービス】クリケット中継はこちら</a>',
     ],
     "MOTORSPORT": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】F1・MotoGP生中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】F1・MotoGP生中継はこちら</a>',
     ],
     "OTHER": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-VOD" target="_blank" rel="nofollow noopener">【注目】人気のスポーツ配信サービスはこちら</a>',
@@ -236,6 +248,36 @@ CATEGORY_LABELS = {
     "OTHER": "スポーツ",
 }
 
+# 出典リンクの表示名マッピング（ドメイン → サイト名）。
+# 未登録ドメインは get_source_name() 内でフォールバック処理される。
+SOURCE_SITE_NAMES = {
+    "goal.com": "Goal.com",
+    "skysports.com": "Sky Sports",
+    "bbc.com": "BBC Sport",
+    "bbc.co.uk": "BBC Sport",
+    "espn.com": "ESPN",
+    "theathletic.com": "The Athletic",
+    "marca.com": "Marca",
+    "as.com": "AS",
+    "gazzetta.it": "Gazzetta dello Sport",
+    "lequipe.fr": "L'Équipe",
+    "kicker.de": "Kicker",
+    "football-italia.net": "Football Italia",
+    "givemesport.com": "GiveMeSport",
+    "mirror.co.uk": "The Mirror",
+    "dailymail.co.uk": "Daily Mail",
+    "telegraph.co.uk": "The Telegraph",
+    "theguardian.com": "The Guardian",
+    "nytimes.com": "New York Times",
+    "espncricinfo.com": "ESPNcricinfo",
+    "mlb.com": "MLB.com",
+    "nba.com": "NBA.com",
+    "mlbtraderumors.com": "MLB Trade Rumors",
+    "web.gekisaka.jp": "ゲキサカ",
+    "gekisaka.jp": "ゲキサカ",
+    "news.google.com": "Google News",
+}
+
 
 # -----------------------------------------------------------------------------
 # 2. 各種処理を行う関数群
@@ -253,6 +295,20 @@ def get_all_rss_urls():
         for q in queries:
             google_news_urls.append(build_google_news_rss(q))
     return RSS_URLS + google_news_urls
+
+
+def get_source_name(url):
+    """URLからドメインを抽出し、登録済みサイト名を返す。未登録の場合はドメイン名を整形して返す"""
+    try:
+        domain = urllib.parse.urlparse(url).netloc.lower()
+        domain = domain[4:] if domain.startswith("www.") else domain
+        if domain in SOURCE_SITE_NAMES:
+            return SOURCE_SITE_NAMES[domain]
+        # 未登録ドメインのフォールバック: example.com → Example
+        base = domain.split(".")[0]
+        return base.capitalize() if base else "情報元サイト"
+    except Exception:
+        return "情報元サイト"
 
 
 def load_processed_urls():
@@ -288,15 +344,21 @@ CATEGORY: [{CATEGORY_LIST_TEXT} のいずれかから、最も近いものを選
 PLAYER_NAME: [ニュースの中心となる選手名を1名だけ、フルネームで記載してください。チーム全体の話題などで個人名が特定できない場合は「不明」と記載してください]
 TITLE: [元記事とは全く違う、ファンが読みたくなるキャッチーなオリジナル独自タイトル]
 SUMMARY:
-・【所属先の公式発表】（移籍先、契約年数、移籍金など、ニュースから読み取れる客観的な事実データを1行で記述）
-・【戦力的な影響・見どころ】（この移籍によってチームがどう変わるか、どのような活躍が期待されるかをあなたの言葉で1行で解説）
-・【今後の注目ポイント】（次のシーズンや、今後のチーム編成に与える影響などをあなたの言葉で1行で解説）
+・（1行目：まず記事内容が「移籍」「残留・契約延長」「退団・契約解除」「契約更改」「スポンサー契約」「解雇」など何の話かを判断し、さらに公式発表済みか、現地報道・噂段階かを判断する。その2つの情報を反映した短いラベル（4〜10文字程度）を自分で作って行頭に付け、内容を1文で記述する）
+・【戦力的な影響・見どころ】（この移籍・契約等によってチームがどう変わるか、どのような影響が期待されるかをあなたの言葉で1行で解説）
+・【今後の注目ポイント】（今後のチーム編成や本人の去就に与える影響などをあなたの言葉で1行で解説）
 
 ■ SUMMARY出力時の重要な注意
 各行は「【ラベル】本文」の形で出力してください（ラベル自体も実際の出力に含めます）。
 ラベルの後の（）内は執筆の指示なので、（）自体は出力に含めず、指示に沿った自然な文章に置き換えてください。
-良い例：・【所属先の公式発表】大谷翔平選手がドジャースとの契約延長に合意したことが公式発表された。契約は3年総額1.5億ドル規模とみられる。
-悪い例：・【所属先の公式発表】（移籍先、契約年数、移籍金など、ニュースから読み取れる客観的な事実データを1行で記述）
+1行目のラベルは固定文言を使い回さず、必ず「話の種類」×「情報の確度」の組み合わせで、その記事に合った言葉を都度作成してください。
+話の種類の例：移籍、残留・契約延長、退団、契約解除、契約更改、スポンサー契約、解雇・戦力外 など（これに限らず記事内容に合わせて判断する）
+情報の確度の例：公式発表がある場合は「公式発表」、現地メディア・関係者情報止まりの場合は「現地報道」「噂」など、確度が分かる言葉を含める
+ラベル例：【移籍の公式発表】【残留の現地報道】【契約解除が公式発表】【スポンサー契約の公式発表】【解雇の可能性・現地報道】【契約更改の公式発表】
+本文の文末表現もラベルの確度と矛盾しないようにしてください（公式発表なら「〜と発表された」、現地報道・噂なら「〜と報じられている」「〜との情報がある」のように断定を避ける）。
+良い例（公式発表あり）：・【移籍の公式発表】大谷翔平選手がドジャースとの契約延長に合意したことが公式発表された。契約は3年総額1.5億ドル規模とみられる。
+良い例（噂段階）：・【残留の現地報道】遠藤航がリヴァプールとの契約延長で合意間近と現地メディアが報じている。正式発表はまだない。
+悪い例：・【移籍の公式発表】遠藤航がリヴァプールとの契約延長で合意間近と報じられている。（← 現地報道段階なのに公式発表ラベルは矛盾）
 
 ■ 執筆上の禁止事項
 - 元記事にある「～と語った」「～という」などの語尾や、文章のつながり（構成）をそのまま真似してはいけません。
@@ -428,6 +490,7 @@ def build_blog_body(category, player_name, summary_lines, source_url):
     vod_ad_html = random.choice(ad_candidates)
 
     thumbnail_url = THUMBNAIL_IMAGES.get(category, THUMBNAIL_IMAGES["OTHER"])
+    source_name = get_source_name(source_url)
 
     blog_body = f"""
     <div class="article-outer">
@@ -442,9 +505,9 @@ def build_blog_body(category, player_name, summary_lines, source_url):
             {vod_ad_html}
         </div>
         <p><small style="color: #999999; display: block; margin-top: 30px; font-size: 12px;">
-            ※本記事は公式発表の事実データをもとに独自の解説を加えたものです。<br>
+            ※本記事は各情報元の事実データをもとに独自の解説を加えたものです。<br>
             ニュースの完全な詳細は、以下の情報元メディアにてご確認ください。<br>
-            情報元URL: <a href="{source_url}" target="_blank" rel="nofollow noopener">{source_url}</a>
+            情報元: <a href="{source_url}" target="_blank" rel="nofollow noopener">{source_name}</a>
         </small></p>
     </div>
     """
