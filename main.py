@@ -8,6 +8,7 @@ import feedparser
 import requests
 from requests.auth import HTTPBasicAuth
 from google import genai
+from googlenewsdecoder import new_decoderv1
 
 # -----------------------------------------------------------------------------
 # 1. 設定・環境変数
@@ -148,6 +149,9 @@ GEMINI_RETRY_WAIT_SECONDS = 20
 
 # 各APIコールの間に空けるインターバル（レートリミット予防）
 API_CALL_INTERVAL_SECONDS = 4
+
+# Google Newsリンクのデコード（news.google.comへの内部リクエスト）の間隔（レートリミット予防）
+GNEWS_DECODE_INTERVAL_SECONDS = 1
 
 # カテゴリ別サムネイル画像（ライブドアの「画像/ファイル」にアップロード済みのオリジナルバナー）
 # トップページ/アーカイブページの <$ArticleFirstImage$> はこの画像を自動的に拾って一覧に表示する。
@@ -308,6 +312,31 @@ def get_source_name(url):
         return base.capitalize() if base else "情報元サイト"
     except Exception:
         return "情報元サイト"
+
+
+def resolve_article_url(url):
+    """Google Newsのリダイレクトリンク（news.google.com/...）を実際の掲載元URLに変換する。
+    Google News以外のURL、またはデコードに失敗した場合は元のURLをそのままフォールバックとして返す。
+    これにより出典表示が「Google News」ではなく実際のメディア名になり、信頼性の見え方が改善する。
+    副次効果として、複数の検索クエリ経由で同じ記事が別々のGoogle Newsリンクとしてヒットしても、
+    実URLに変換した後で重複判定するため、二重投稿の防止にも役立つ。"""
+    try:
+        domain = urllib.parse.urlparse(url).netloc.lower()
+    except Exception:
+        return url
+
+    if "news.google.com" not in domain:
+        return url  # Google News以外のURLはそのまま返す（公式RSS等）
+
+    try:
+        result = new_decoderv1(url, interval=GNEWS_DECODE_INTERVAL_SECONDS)
+        if result.get("status") and result.get("decoded_url"):
+            return result["decoded_url"]
+        print(f"Google Newsリンクのデコードに失敗しました（status=False）。元のURLを使用します: {url}")
+    except Exception as e:
+        print(f"Google Newsリンクのデコード中にエラーが発生しました。元のURLを使用します: {e}")
+
+    return url  # デコード失敗時は元のURL（news.google.com）にフォールバック
 
 
 def load_processed_urls():
@@ -503,7 +532,7 @@ def build_blog_body(category, player_name, summary_lines, source_url):
             <div class="ad-caption">ADVERTISEMENT</div>
             {vod_ad_html}
         </div>
-        <p><small style="color: #999999; display: block; margin-top: 30px; font-size: 12px;">
+        <p><small style="color: #6e6e6e; display: block; margin-top: 30px; font-size: 11px;">
             ※本記事は各情報元の事実データをもとに独自の解説を加えたものです。<br>
             ニュースの完全な詳細は、以下の情報元メディアにてご確認ください。<br>
             情報元: <a href="{source_url}" target="_blank" rel="nofollow noopener">{source_name}</a>
@@ -592,7 +621,16 @@ def main():
         for entry in feed.entries:
             url = entry.link
             if url in processed_urls:
-                continue  # 重複排除
+                continue  # 重複排除（Google Newsリンクそのものでの既読チェック）
+
+            # Google Newsのリダイレクトリンクなら実際の掲載元URLに変換する
+            resolved_url = resolve_article_url(url)
+            if resolved_url != url and resolved_url in processed_urls:
+                # 別の検索クエリ経由で既に処理済みだった同一記事なので、このリンクも既読化してスキップ
+                print(f"別ルートで既に処理済みの記事と判定したためスキップします: {resolved_url}")
+                save_processed_url(url)
+                processed_urls.add(url)
+                continue
 
             print(f"未着手の新規記事を発見しました: {entry.title}")
             raw_output = check_and_summarize_with_gemini(entry.title, entry.get("summary", ""))
@@ -603,6 +641,8 @@ def main():
             if not raw_output:
                 print("移籍・去就情報ではないためスキップ、またはAPIエラーです。")
                 save_processed_url(url)
+                if resolved_url != url:
+                    save_processed_url(resolved_url)
                 continue
 
             category, player_name, blog_title, summary_lines = parse_ai_output(raw_output)
@@ -611,13 +651,17 @@ def main():
             if not summary_lines:
                 print("要約の抽出に失敗したためスキップします。")
                 save_processed_url(url)
+                if resolved_url != url:
+                    save_processed_url(resolved_url)
                 continue
 
-            blog_body = build_blog_body(category, player_name, summary_lines, url)
+            blog_body = build_blog_body(category, player_name, summary_lines, resolved_url)
 
             success = send_to_blog(blog_title, blog_body, category, publish=True)
             if success:
                 save_processed_url(url)
+                if resolved_url != url:
+                    save_processed_url(resolved_url)
                 print("1件の配信処理が正常終了したため、スクリプトを終了します。")
                 sys.exit(0)
 
