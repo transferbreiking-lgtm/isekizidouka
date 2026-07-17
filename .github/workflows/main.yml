@@ -5,6 +5,9 @@ on:
     - cron: '0 */2 * * *'   # 2時間おき（毎時0分、偶数時）に自動実行
   workflow_dispatch:          # 管理画面から手動起動するためのボタン
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
