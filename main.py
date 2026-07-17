@@ -171,22 +171,26 @@ THUMBNAIL_IMAGES = {
 # 競技カテゴリごとのアフィリエイト広告（ad-sectionに表示するリンク）
 # ※ 複数ASPを混在させる場合も、リスト内にHTMLリンク文字列をそのまま追加すればよい
 #    （投稿のたびに random.choice でランダムローテーションされ、自動でA/Bテストになる）。
-# ※ A8.netにはDAZN・U-NEXTの取り扱いがないため、DAZN案件はアクセストレード、
-#    U-NEXT案件はバリューコマースで別途提携し、そのリンクをここに追加している。
-# ※ 下記の "XXXXXX" 部分は全てプレースホルダー。各ASPの管理画面で発行した
-#    実際の素材コード（rk=... / sid=...&pid=... 等）に差し替えること。
+#
+# ※ DAZN（個人向け単独サブスク案件）は2026年7月時点で全ASPともクローズドASP化しており
+#    新規提携が不可能と判明。そのため、同じDAZNコンテンツを視聴できる代替案件
+#    「DMM×DAZNホーダイ」（DMM経由でDAZNに加入するプラン）に切り替えた。
+#    A8.netでは実際に管理画面で検索しても当該案件が見当たらなかったため、
+#    現時点では「アクセストレード」単独で提携する構成にしている（1件でもOKな設計）。
+#    ※A8.netに後日案件が現れた場合は、リストにもう1行A8.netリンクを追加すれば
+#      自動でランダムローテーション（A/Bテスト）に組み込まれる。
+# ※ U-NEXT案件はA8.netに取り扱いがないため、引き続きバリューコマースと別途提携している。
+# ※ 下記の "XXXXXX" 部分は全てプレースホルダー。アクセストレードの管理画面で「DMM×DAZNホーダイ」に
+#    提携申請し、発行された実際の素材コード（rk=...）に差し替えること。
 AFFILIATE_ADS = {
     "SOCCER": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】海外サッカーを見るならこちら</a>',
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】海外サッカーを見るならこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DMMDAZN" target="_blank" rel="nofollow noopener">【DMM×DAZNホーダイ】海外サッカーを見るならこちら</a>',
     ],
     "BASEBALL": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】メジャー・プロ野球の生中継はこちら</a>',
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】メジャー・プロ野球の生中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DMMDAZN" target="_blank" rel="nofollow noopener">【DMM×DAZNホーダイ】メジャー・プロ野球の生中継はこちら</a>',
     ],
     "BASKETBALL": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NBA・Bリーグの生中継はこちら</a>',
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NBA・Bリーグの生中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DMMDAZN" target="_blank" rel="nofollow noopener">【DMM×DAZNホーダイ】NBA・Bリーグの生中継はこちら</a>',
     ],
     "WRESTLING": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-ABEMA" target="_blank" rel="nofollow noopener">【ABEMA】プロレス配信はこちら</a>',
@@ -200,27 +204,22 @@ AFFILIATE_ADS = {
         '<a href="https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=XXXXXX&pid=XXXXXX-UNEXT" target="_blank" rel="nofollow noopener">【U-NEXT】世界戦のライブ配信はこちら</a>',
     ],
     "VOLLEYBALL": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】バレーボール中継はこちら</a>',
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】バレーボール中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DMMDAZN" target="_blank" rel="nofollow noopener">【DMM×DAZNホーダイ】バレーボール中継はこちら</a>',
     ],
     "AMERICAN_FOOTBALL": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NFL生中継はこちら</a>',
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NFL生中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DMMDAZN" target="_blank" rel="nofollow noopener">【DMM×DAZNホーダイ】NFL生中継はこちら</a>',
     ],
     "ICE_HOCKEY": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NHL生中継はこちら</a>',
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NHL生中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DMMDAZN" target="_blank" rel="nofollow noopener">【DMM×DAZNホーダイ】NHL生中継はこちら</a>',
     ],
     "RUGBY": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】ラグビー中継はこちら</a>',
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】ラグビー中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DMMDAZN" target="_blank" rel="nofollow noopener">【DMM×DAZNホーダイ】ラグビー中継はこちら</a>',
     ],
     "CRICKET": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-VOD" target="_blank" rel="nofollow noopener">【配信サービス】クリケット中継はこちら</a>',
     ],
     "MOTORSPORT": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】F1・MotoGP生中継はこちら</a>',
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】F1・MotoGP生中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DMMDAZN" target="_blank" rel="nofollow noopener">【DMM×DAZNホーダイ】F1・MotoGP生中継はこちら</a>',
     ],
     "OTHER": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-VOD" target="_blank" rel="nofollow noopener">【注目】人気のスポーツ配信サービスはこちら</a>',
