@@ -136,8 +136,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")  # フォールバック用（無料枠）
 LIVEDOOR_BLOG_ID = os.environ.get("LIVEDOOR_BLOG_ID")
 LIVEDOOR_API_KEY = os.environ.get("LIVEDOOR_API_KEY")
-
-# サイトのベースURL（チームカテゴリアーカイブへの関連記事リンク生成に使用）
+# チーム別カテゴリアーカイブのURL組み立てに使う独自ドメイン（末尾スラッシュ必須）
 BLOG_BASE_URL = os.environ.get("BLOG_BASE_URL", "https://transferbreiking.officialblog.jp/")
 
 # OpenRouterのフォールバック先モデル（無料枠モデル）
@@ -153,7 +152,7 @@ GEMINI_RETRY_WAIT_SECONDS = 20
 # 各APIコールの間に空けるインターバル（レートリミット予防）
 API_CALL_INTERVAL_SECONDS = 4
 
-# Google Newsリンクのデコード（news.google.comへの内部リクエスト）の間隔（レートリミット予防）
+# Google Newsリンクのデコード処理の内部待機秒数（googlenewsdecoderライブラリの引数）
 GNEWS_DECODE_INTERVAL_SECONDS = 1
 
 # カテゴリ別サムネイル画像（ライブドアの「画像/ファイル」にアップロード済みのオリジナルバナー）
@@ -178,26 +177,22 @@ THUMBNAIL_IMAGES = {
 # 競技カテゴリごとのアフィリエイト広告（ad-sectionに表示するリンク）
 # ※ 複数ASPを混在させる場合も、リスト内にHTMLリンク文字列をそのまま追加すればよい
 #    （投稿のたびに random.choice でランダムローテーションされ、自動でA/Bテストになる）。
-#
-# ※ DAZN（個人向け単独サブスク案件）は2026年7月時点で全ASPともクローズドASP化しており
-#    新規提携が不可能と判明。そのため、同じDAZNコンテンツを視聴できる代替案件
-#    「DMM×DAZNホーダイ」（DMM経由でDAZNに加入するプラン）に切り替えた。
-#    A8.netでは実際に管理画面で検索しても当該案件が見当たらなかったため、
-#    現時点では「アクセストレード」単独で提携する構成にしている（1件でもOKな設計）。
-#    ※A8.netに後日案件が現れた場合は、リストにもう1行A8.netリンクを追加すれば
-#      自動でランダムローテーション（A/Bテスト）に組み込まれる。
-# ※ U-NEXT案件はA8.netに取り扱いがないため、引き続きバリューコマースと別途提携している。
-# ※ 下記の "XXXXXX" 部分は全てプレースホルダー。アクセストレードの管理画面で「DMM×DAZNホーダイ」に
-#    提携申請し、発行された実際の素材コード（rk=...）に差し替えること。
+# ※ A8.netにはDAZN・U-NEXTの取り扱いがないため、DAZN案件はアクセストレード、
+#    U-NEXT案件はバリューコマースで別途提携し、そのリンクをここに追加している。
+# ※ 下記の "XXXXXX" 部分は全てプレースホルダー。各ASPの管理画面で発行した
+#    実際の素材コード（rk=... / sid=...&pid=... 等）に差し替えること。
 AFFILIATE_ADS = {
     "SOCCER": [
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DMMDAZN" target="_blank" rel="nofollow noopener">【DMM×DAZNホーダイ】海外サッカーを見るならこちら</a>',
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】海外サッカーを見るならこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】海外サッカーを見るならこちら</a>',
     ],
     "BASEBALL": [
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DMMDAZN" target="_blank" rel="nofollow noopener">【DMM×DAZNホーダイ】メジャー・プロ野球の生中継はこちら</a>',
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】メジャー・プロ野球の生中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】メジャー・プロ野球の生中継はこちら</a>',
     ],
     "BASKETBALL": [
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DMMDAZN" target="_blank" rel="nofollow noopener">【DMM×DAZNホーダイ】NBA・Bリーグの生中継はこちら</a>',
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NBA・Bリーグの生中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NBA・Bリーグの生中継はこちら</a>',
     ],
     "WRESTLING": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-ABEMA" target="_blank" rel="nofollow noopener">【ABEMA】プロレス配信はこちら</a>',
@@ -211,22 +206,27 @@ AFFILIATE_ADS = {
         '<a href="https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=XXXXXX&pid=XXXXXX-UNEXT" target="_blank" rel="nofollow noopener">【U-NEXT】世界戦のライブ配信はこちら</a>',
     ],
     "VOLLEYBALL": [
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DMMDAZN" target="_blank" rel="nofollow noopener">【DMM×DAZNホーダイ】バレーボール中継はこちら</a>',
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】バレーボール中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】バレーボール中継はこちら</a>',
     ],
     "AMERICAN_FOOTBALL": [
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DMMDAZN" target="_blank" rel="nofollow noopener">【DMM×DAZNホーダイ】NFL生中継はこちら</a>',
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NFL生中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NFL生中継はこちら</a>',
     ],
     "ICE_HOCKEY": [
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DMMDAZN" target="_blank" rel="nofollow noopener">【DMM×DAZNホーダイ】NHL生中継はこちら</a>',
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NHL生中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NHL生中継はこちら</a>',
     ],
     "RUGBY": [
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DMMDAZN" target="_blank" rel="nofollow noopener">【DMM×DAZNホーダイ】ラグビー中継はこちら</a>',
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】ラグビー中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】ラグビー中継はこちら</a>',
     ],
     "CRICKET": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-VOD" target="_blank" rel="nofollow noopener">【配信サービス】クリケット中継はこちら</a>',
     ],
     "MOTORSPORT": [
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DMMDAZN" target="_blank" rel="nofollow noopener">【DMM×DAZNホーダイ】F1・MotoGP生中継はこちら</a>',
+        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】F1・MotoGP生中継はこちら</a>',
+        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】F1・MotoGP生中継はこちら</a>',
     ],
     "OTHER": [
         '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-VOD" target="_blank" rel="nofollow noopener">【注目】人気のスポーツ配信サービスはこちら</a>',
@@ -373,7 +373,7 @@ def build_prompt(title, summary_text):
 ■ 出力フォーマット
 CATEGORY: [{CATEGORY_LIST_TEXT} のいずれかから、最も近いものを選んでください]
 PLAYER_NAME: [ニュースの中心となる選手名を1名だけ、フルネームで記載してください。チーム全体の話題などで個人名が特定できない場合は「不明」と記載してください]
-TEAM_NAME: [ニュースの中心となるチーム・クラブ名を1つだけ記載してください。移籍先と移籍元の両方が登場する場合は、話の主役となる方（新加入先のクラブ、または残留・契約更新の場合は在籍クラブ）を優先してください。表記は正式名称ではなく日本のスポーツニュースで一般的に使われる通称（例: レアル・マドリード、read: 巨人、ロサンゼルス・ドジャース）で統一してください。特定できない場合は「不明」と記載してください]
+TEAM_NAME: [この移籍・契約等の中心となるチーム・クラブ名を1つだけ記載してください（移籍の場合は移籍先チームを優先。移籍先が未定・不明な場合は移籍元チームでも可）。正式名称または日本のメディアで一般的に使われる表記で、20文字以内で簡潔に記載してください（例: レアル・マドリード、読売ジャイアンツ、レイカーズ）。特定のチームに紐づかない話題（代表選考の一般論など）の場合は「不明」と記載してください]
 TITLE: [元記事とは全く違う、ファンが読みたくなるキャッチーなオリジナル独自タイトル]
 SUMMARY:
 ・（1行目：まず記事内容が「移籍」「残留・契約延長」「退団・契約解除」「契約更改」「スポンサー契約」「解雇」など何の話かを判断し、さらに公式発表済みか、現地報道・噂段階かを判断する。その2つの情報を反映した短いラベル（4〜10文字程度）を自分で作って行頭に付け、内容を1文で記述する）
@@ -511,7 +511,7 @@ def parse_ai_output(output_text):
         player_name = None
 
     # チーム名バリデーション：空・不明・None・異常に長い（AIの出力崩れ）ものは除外する。
-    # ライブドアのカテゴリ名として不正な文字（改行等）が混入するのを防ぐ意味もある。
+    # ライブドアのカテゴリ名として不正な文字（改行・スラッシュ等）が混入するのも防ぐ。
     if team_name in ("", "不明", "None") or len(team_name) > 30:
         team_name = None
     else:
@@ -527,7 +527,7 @@ def build_team_archive_url(team_name):
 
 
 def build_blog_body(category, player_name, team_name, summary_lines, source_url):
-    """元デザイン（3行要約リスト・関連記事リンク・VOD広告）に沿った記事本文HTMLを組み立てる"""
+    """元デザイン（3行要約リスト・選手グッズ個別リンク・VOD広告）に沿った記事本文HTMLを組み立てる"""
     summary_html = "\n".join(f"            <li>{line}</li>" for line in summary_lines)
 
     # 楽天・Amazonは現在未提携のため広告表示なし（提携完了後に再実装する）。
@@ -542,8 +542,8 @@ def build_blog_body(category, player_name, team_name, summary_lines, source_url)
 
     # チーム名が取得できた場合のみ、そのチームのカテゴリアーカイブへのリンクブロックを挿入する。
     # AtomPubはタグ割当に対応していないため、チーム名は「サブカテゴリ」として2つ目の<category>で
-    # 送信し（4-8の方針転換）、記事本文内には既存のカテゴリアーカイブ機能（4-5）を再利用した
-    # 「同チームの関連記事一覧」リンクを自動生成することで、タグ的な回遊導線を実現する。
+    # 送信し、記事本文内には既存のカテゴリアーカイブ機能を再利用した「同チームの関連記事一覧」
+    # リンクを自動生成することで、タグ的な回遊導線を実現する。
     related_html = ""
     if team_name:
         team_archive_url = build_team_archive_url(team_name)
@@ -567,7 +567,7 @@ def build_blog_body(category, player_name, team_name, summary_lines, source_url)
         <p><small style="color: #6e6e6e; display: block; margin-top: 30px; font-size: 11px;">
             ※本記事は各情報元の事実データをもとに独自の解説を加えたものです。<br>
             ニュースの完全な詳細は、以下の情報元メディアにてご確認ください。<br>
-            情報元: <a href="{source_url}" target="_blank" rel="nofollow noopener">{source_name}</a>
+            情報元: <a href="{source_url}" target="_blank" rel="nofollow noopener" style="color:#8a8a8a;">{source_name}</a>
         </small></p>
     </div>
     """
@@ -581,7 +581,7 @@ def send_to_blog(subject, body_html, category, team_name=None, publish=True):
                      ライブドア側に同名カテゴリが無ければ自動で新規作成される。
     team_name     : チーム名（例: "レアル・マドリード"）。指定があれば2つ目の<category>として送信し、
                      競技カテゴリとは別にチーム別カテゴリアーカイブを自動生成させる（1記事あたり最大2カテゴリ）。
-                     AtomPub APIはタグ割当に対応していないため、タグの代替としてこの方式を採用している。
+                     AtomPub APIはタグ割当に対応していないため、この「2つ目のカテゴリ」方式でタグの代替とする。
     publish=True  : 即時公開
     publish=False : 下書き保存（動作確認したいときに使用）
     """
@@ -599,17 +599,18 @@ def send_to_blog(subject, body_html, category, team_name=None, publish=True):
     content_elm = ET.SubElement(entry, "content", attrib={"type": "text/html"})
     content_elm.text = body_html
 
-    category_scheme = f"https://livedoor.blogcms.jp/atompub/{LIVEDOOR_BLOG_ID}/category"
-
     category_label = CATEGORY_LABELS.get(category, CATEGORY_LABELS["OTHER"])
     ET.SubElement(entry, "category", attrib={
-        "scheme": category_scheme,
+        "scheme": f"https://livedoor.blogcms.jp/atompub/{LIVEDOOR_BLOG_ID}/category",
         "term": category_label,
     })
 
+    # チーム名が取得できていれば、2つ目の<category>としてチーム名も送信する。
+    # ライブドア側に同名カテゴリが無ければAtomPubが自動で新規作成してくれるため、
+    # 事前登録は不要。これにより「category/{チーム名}」アーカイブが自動生成される。
     if team_name:
         ET.SubElement(entry, "category", attrib={
-            "scheme": category_scheme,
+            "scheme": f"https://livedoor.blogcms.jp/atompub/{LIVEDOOR_BLOG_ID}/category",
             "term": team_name,
         })
 
