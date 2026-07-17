@@ -137,6 +137,9 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")  # フォールバッ�
 LIVEDOOR_BLOG_ID = os.environ.get("LIVEDOOR_BLOG_ID")
 LIVEDOOR_API_KEY = os.environ.get("LIVEDOOR_API_KEY")
 
+# サイトのベースURL（チームカテゴリアーカイブへの関連記事リンク生成に使用）
+BLOG_BASE_URL = os.environ.get("BLOG_BASE_URL", "https://transferbreiking.officialblog.jp/")
+
 # OpenRouterのフォールバック先モデル（無料枠モデル）
 # ※ deepseek/deepseek-chat-v3-0324:free は2026年7月時点で無料枠が廃止され有料化された。
 #    OpenRouterの無料モデルは入れ替わりが激しいので、時々 https://openrouter.ai/models?max_price=0 で
@@ -370,6 +373,7 @@ def build_prompt(title, summary_text):
 ■ 出力フォーマット
 CATEGORY: [{CATEGORY_LIST_TEXT} のいずれかから、最も近いものを選んでください]
 PLAYER_NAME: [ニュースの中心となる選手名を1名だけ、フルネームで記載してください。チーム全体の話題などで個人名が特定できない場合は「不明」と記載してください]
+TEAM_NAME: [ニュースの中心となるチーム・クラブ名を1つだけ記載してください。移籍先と移籍元の両方が登場する場合は、話の主役となる方（新加入先のクラブ、または残留・契約更新の場合は在籍クラブ）を優先してください。表記は正式名称ではなく日本のスポーツニュースで一般的に使われる通称（例: レアル・マドリード、read: 巨人、ロサンゼルス・ドジャース）で統一してください。特定できない場合は「不明」と記載してください]
 TITLE: [元記事とは全く違う、ファンが読みたくなるキャッチーなオリジナル独自タイトル]
 SUMMARY:
 ・（1行目：まず記事内容が「移籍」「残留・契約延長」「退団・契約解除」「契約更改」「スポンサー契約」「解雇」など何の話かを判断し、さらに公式発表済みか、現地報道・噂段階かを判断する。その2つの情報を反映した短いラベル（4〜10文字程度）を自分で作って行頭に付け、内容を1文で記述する）
@@ -476,10 +480,11 @@ def check_and_summarize_with_gemini(title, summary_text):
 
 
 def parse_ai_output(output_text):
-    """AIの出力テキストからカテゴリ・選手名・タイトル・要約(箇条書きリスト)を分解・抽出する"""
+    """AIの出力テキストからカテゴリ・選手名・チーム名・タイトル・要約(箇条書きリスト)を分解・抽出する"""
     lines = output_text.split("\n")
     category = "OTHER"
     player_name = ""
+    team_name = ""
     title = ""
     summary_lines = []
     is_summary = False
@@ -489,6 +494,8 @@ def parse_ai_output(output_text):
             category = line.replace("CATEGORY:", "").strip()
         elif line.startswith("PLAYER_NAME:"):
             player_name = line.replace("PLAYER_NAME:", "").strip()
+        elif line.startswith("TEAM_NAME:"):
+            team_name = line.replace("TEAM_NAME:", "").strip()
         elif line.startswith("TITLE:"):
             title = line.replace("TITLE:", "").strip()
         elif line.startswith("SUMMARY:"):
@@ -503,11 +510,24 @@ def parse_ai_output(output_text):
     if player_name in ("", "不明", "None"):
         player_name = None
 
-    return category, player_name, title, summary_lines
+    # チーム名バリデーション：空・不明・None・異常に長い（AIの出力崩れ）ものは除外する。
+    # ライブドアのカテゴリ名として不正な文字（改行等）が混入するのを防ぐ意味もある。
+    if team_name in ("", "不明", "None") or len(team_name) > 30:
+        team_name = None
+    else:
+        team_name = team_name.replace("\n", "").replace("/", "・").strip()
+
+    return category, player_name, team_name, title, summary_lines
 
 
-def build_blog_body(category, player_name, summary_lines, source_url):
-    """元デザイン（3行要約リスト・選手グッズ個別リンク・VOD広告）に沿った記事本文HTMLを組み立てる"""
+def build_team_archive_url(team_name):
+    """チーム名からカテゴリアーカイブページのURLを組み立てる（category/{チーム名}形式）"""
+    encoded_team = urllib.parse.quote(team_name)
+    return f"{BLOG_BASE_URL.rstrip('/')}/category/{encoded_team}"
+
+
+def build_blog_body(category, player_name, team_name, summary_lines, source_url):
+    """元デザイン（3行要約リスト・関連記事リンク・VOD広告）に沿った記事本文HTMLを組み立てる"""
     summary_html = "\n".join(f"            <li>{line}</li>" for line in summary_lines)
 
     # 楽天・Amazonは現在未提携のため広告表示なし（提携完了後に再実装する）。
@@ -520,6 +540,18 @@ def build_blog_body(category, player_name, summary_lines, source_url):
     thumbnail_url = THUMBNAIL_IMAGES.get(category, THUMBNAIL_IMAGES["OTHER"])
     source_name = get_source_name(source_url)
 
+    # チーム名が取得できた場合のみ、そのチームのカテゴリアーカイブへのリンクブロックを挿入する。
+    # AtomPubはタグ割当に対応していないため、チーム名は「サブカテゴリ」として2つ目の<category>で
+    # 送信し（4-8の方針転換）、記事本文内には既存のカテゴリアーカイブ機能（4-5）を再利用した
+    # 「同チームの関連記事一覧」リンクを自動生成することで、タグ的な回遊導線を実現する。
+    related_html = ""
+    if team_name:
+        team_archive_url = build_team_archive_url(team_name)
+        related_html = f"""
+        <div class="related-team-section" style="margin-top:16px; padding:10px 14px; background:#1a1a1c; border-left:3px solid #e4002b;">
+            <a href="{team_archive_url}" style="color:#e4002b; text-decoration:none; font-weight:bold;">📌 {team_name}の関連記事一覧はこちら »</a>
+        </div>"""
+
     blog_body = f"""
     <div class="article-outer">
         <img src="{thumbnail_url}" alt="{category}" class="article-thumbnail" style="max-width:100%; width:100%; height:auto; display:block; border:1px solid #333;" />
@@ -527,7 +559,7 @@ def build_blog_body(category, player_name, summary_lines, source_url):
             <ul class="summary-list">
 {summary_html}
             </ul>
-        </div>
+        </div>{related_html}
         <div class="ad-section">
             <div class="ad-caption">ADVERTISEMENT</div>
             {vod_ad_html}
@@ -542,11 +574,14 @@ def build_blog_body(category, player_name, summary_lines, source_url):
     return blog_body
 
 
-def send_to_blog(subject, body_html, category, publish=True):
+def send_to_blog(subject, body_html, category, team_name=None, publish=True):
     """AtomPub APIを使ってライブドアブログへ記事を投稿する
 
     category      : main.py内のカテゴリコード（例: "SOCCER"）。CATEGORY_LABELSで日本語ラベルに変換して送信する。
                      ライブドア側に同名カテゴリが無ければ自動で新規作成される。
+    team_name     : チーム名（例: "レアル・マドリード"）。指定があれば2つ目の<category>として送信し、
+                     競技カテゴリとは別にチーム別カテゴリアーカイブを自動生成させる（1記事あたり最大2カテゴリ）。
+                     AtomPub APIはタグ割当に対応していないため、タグの代替としてこの方式を採用している。
     publish=True  : 即時公開
     publish=False : 下書き保存（動作確認したいときに使用）
     """
@@ -564,11 +599,19 @@ def send_to_blog(subject, body_html, category, publish=True):
     content_elm = ET.SubElement(entry, "content", attrib={"type": "text/html"})
     content_elm.text = body_html
 
+    category_scheme = f"https://livedoor.blogcms.jp/atompub/{LIVEDOOR_BLOG_ID}/category"
+
     category_label = CATEGORY_LABELS.get(category, CATEGORY_LABELS["OTHER"])
     ET.SubElement(entry, "category", attrib={
-        "scheme": f"https://livedoor.blogcms.jp/atompub/{LIVEDOOR_BLOG_ID}/category",
+        "scheme": category_scheme,
         "term": category_label,
     })
+
+    if team_name:
+        ET.SubElement(entry, "category", attrib={
+            "scheme": category_scheme,
+            "term": team_name,
+        })
 
     app_control = ET.SubElement(entry, "app:control")
     app_draft = ET.SubElement(app_control, "app:draft")
@@ -645,7 +688,7 @@ def main():
                     save_processed_url(resolved_url)
                 continue
 
-            category, player_name, blog_title, summary_lines = parse_ai_output(raw_output)
+            category, player_name, team_name, blog_title, summary_lines = parse_ai_output(raw_output)
             if not blog_title:
                 blog_title = entry.title
             if not summary_lines:
@@ -655,9 +698,9 @@ def main():
                     save_processed_url(resolved_url)
                 continue
 
-            blog_body = build_blog_body(category, player_name, summary_lines, resolved_url)
+            blog_body = build_blog_body(category, player_name, team_name, summary_lines, resolved_url)
 
-            success = send_to_blog(blog_title, blog_body, category, publish=True)
+            success = send_to_blog(blog_title, blog_body, category, team_name=team_name, publish=True)
             if success:
                 save_processed_url(url)
                 if resolved_url != url:
