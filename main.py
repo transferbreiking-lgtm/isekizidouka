@@ -531,8 +531,9 @@ def build_blog_body(category, player_name, team_name, summary_lines, source_url)
     summary_html = "\n".join(f"            <li>{line}</li>" for line in summary_lines)
 
     # 楽天・Amazonは現在未提携のため広告表示なし（提携完了後に再実装する）。
-    # player_nameは将来の選手別広告拡張のために引数として残してあるが、現状は未使用。
+    # player_name・team_nameは本文生成では現状未使用（team_nameは記事上部の赤バッジ用にsend_to_blog側で使用する）。
     _ = player_name  # 現状未使用（将来の選手別A8案件マッチング用に保持）
+    _ = team_name  # 記事下部バナーは親カテゴリ固定に戻したため本文生成では未使用
 
     ad_candidates = AFFILIATE_ADS.get(category, AFFILIATE_ADS["OTHER"])
     vod_ad_html = random.choice(ad_candidates)
@@ -540,16 +541,14 @@ def build_blog_body(category, player_name, team_name, summary_lines, source_url)
     thumbnail_url = THUMBNAIL_IMAGES.get(category, THUMBNAIL_IMAGES["OTHER"])
     source_name = get_source_name(source_url)
 
-    # チーム名が取得できた場合のみ、そのチームのカテゴリアーカイブへのリンクブロックを挿入する。
-    # AtomPubはタグ割当に対応していないため、チーム名は「サブカテゴリ」として2つ目の<category>で
-    # 送信し、記事本文内には既存のカテゴリアーカイブ機能を再利用した「同チームの関連記事一覧」
-    # リンクを自動生成することで、タグ的な回遊導線を実現する。
-    related_html = ""
-    if team_name:
-        team_archive_url = build_team_archive_url(team_name)
-        related_html = f"""
+    # 記事下部には「同カテゴリ（親タグ）の記事一覧」への導線バナーを常に表示する。
+    # チーム別の導線は、記事上部の赤バッジ（<$ArticleCategory1$>の右隣に並ぶ<$ArticleCategory2$>）が
+    # 既に担っているため、記事下部は元々の設計どおり親カテゴリへのリンクに統一する。
+    category_label = CATEGORY_LABELS.get(category, CATEGORY_LABELS["OTHER"])
+    category_archive_url = build_team_archive_url(category_label)  # 「チーム名」に限らず任意のカテゴリ名でアーカイブURLを組み立てられる汎用関数として利用
+    related_html = f"""
         <div class="related-team-section" style="margin-top:16px; padding:10px 14px; background:#1a1a1c; border-left:3px solid #e4002b;">
-            <a href="{team_archive_url}" style="color:#e4002b; text-decoration:none; font-weight:bold;">📌 {team_name}の関連記事一覧はこちら »</a>
+            <a href="{category_archive_url}" style="color:#e4002b; text-decoration:none; font-weight:bold;">📌 {category_label}の記事一覧はこちら »</a>
         </div>"""
 
     blog_body = f"""
