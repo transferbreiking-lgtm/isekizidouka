@@ -221,7 +221,14 @@ def fetch_all_entries():
 
 
 def extract_team_name(title, body_text):
-    """過去記事のタイトル・本文からAIでチーム名を再抽出する。main.pyのAIモデル呼び出しをそのまま再利用する。"""
+    """過去記事のタイトル・本文からAIでチーム名を再抽出する。main.pyのAIモデル呼び出しをそのまま再利用する。
+
+    戻り値は (team_name_or_None, api_succeeded) のタプル。
+    - api_succeeded=False : Gemini/OpenRouterともにAPI呼び出し自体が失敗した（クォータ切れ・ネットワークエラー等）。
+      この場合は「未試行」として扱い、次回実行時に再試行できるようにする（呼び出し元でbackfill_processed.txtに記録しない）。
+    - api_succeeded=True  : API呼び出しは成功した。team_nameがNoneの場合は「AIがチームを特定できないと判定した」ことを意味し、
+      これは正常な判定結果なので次回以降は再試行不要（呼び出し元でbackfill_processed.txtに記録する）。
+    """
     prompt = f"""
 あなたはプロのスポーツ編集者です。以下は過去に投稿されたスポーツ移籍ニュース記事です。
 この記事の中心となるチーム・クラブ名を1つだけ特定してください。
@@ -241,12 +248,12 @@ def extract_team_name(title, body_text):
         result = call_openrouter_fallback(prompt)
 
     if result is None:
-        return None
+        return None, False  # API呼び出し自体が失敗（クォータ切れ等）。未試行扱いにする。
 
     team_name = result.strip().split("\n")[0].strip()
     if team_name in ("", "不明", "None") or len(team_name) > 30:
-        return None
-    return team_name.replace("\n", "").replace("/", "・").strip()
+        return None, True  # API呼び出しは成功。AIが「不明」と判定した正常な結果。
+    return team_name.replace("\n", "").replace("/", "・").strip(), True
 
 
 def update_entry(entry_elem, team_name=None, new_body_html=None):
@@ -375,14 +382,17 @@ def main():
         processed_count += 1
 
         team_name = None
+        team_api_succeeded = True  # needs_teamがFalseの場合は記録判定に影響させないためTrue扱い
         if needs_team:
             print(f"[{processed_count}] チーム名抽出中: {title}")
-            team_name = extract_team_name(title, strip_html(body_html))
+            team_name, team_api_succeeded = extract_team_name(title, strip_html(body_html))
             time.sleep(API_CALL_INTERVAL_SECONDS)
             if team_name:
                 print(f"  → 抽出結果: {team_name}")
-            else:
+            elif team_api_succeeded:
                 print("  → チーム名を特定できなかったため、チームタグの付与は見送ります。")
+            else:
+                print("  → API呼び出し自体が失敗（クォータ切れ等）。次回実行時に再試行します。")
 
         if thumb_changed:
             print(f"[{processed_count}] サムネイル画像を同期します: {title}（category={category_code}）")
@@ -397,9 +407,12 @@ def main():
 
         if success:
             updated_count += 1
-            if needs_team and not DRY_RUN:
-                # チーム名が特定できた/できなかったに関わらず「試行済み」として記録し、
+            if needs_team and not DRY_RUN and team_api_succeeded:
+                # 「AIがチームを特定できないと正常に判定した」場合のみ試行済みとして記録し、
                 # 次回実行時に同じ記事へ無駄なAI呼び出しを繰り返さないようにする。
+                # API呼び出し自体が失敗した場合（クォータ切れ等）は記録しない。
+                # 記録してしまうと、クォータが回復した後の再実行でもこの記事だけ
+                # 永久にチーム名抽出がスキップされてしまうため。
                 # DRY RUN中は実際には何も更新していないため、ここで記録してはいけない
                 # （記録してしまうと、その後の本番実行時に「試行済み」と誤判定され、
                 #   チームタグが一切送信されなくなるバグになる）。
