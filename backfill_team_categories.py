@@ -397,9 +397,12 @@ def main():
 
         if success:
             updated_count += 1
-            if needs_team:
+            if needs_team and not DRY_RUN:
                 # チーム名が特定できた/できなかったに関わらず「試行済み」として記録し、
-                # 次回実行時に同じ記事へ無駄なAI呼び出しを繰り返さないようにする
+                # 次回実行時に同じ記事へ無駄なAI呼び出しを繰り返さないようにする。
+                # DRY RUN中は実際には何も更新していないため、ここで記録してはいけない
+                # （記録してしまうと、その後の本番実行時に「試行済み」と誤判定され、
+                #   チームタグが一切送信されなくなるバグになる）。
                 save_backfilled_id(entry_id)
                 backfilled_ids.add(entry_id)
 
