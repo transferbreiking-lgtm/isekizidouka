@@ -28,9 +28,13 @@ main.py と同じディレクトリに置いて実行すること（main.py の�
      DRY_RUN=false python backfill_team_categories.py
 
 ■ 環境変数
-- GEMINI_API_KEY / OPENROUTER_API_KEY / LIVEDOOR_BLOG_ID / LIVEDOOR_API_KEY : main.py と共通
+- GEMINI_API_KEY / MISTRAL_API_KEY / OPENROUTER_API_KEY / LIVEDOOR_BLOG_ID / LIVEDOOR_API_KEY : main.py と共通
 - DRY_RUN : "false" を指定すると実際に更新を実行する（未指定時は "true" 扱いでログ出力のみ）
 - MAX_ENTRIES : 1回の実行で処理する最大記事数（未指定なら無制限）
+
+■ AIフォールバック順（main.pyと共通）
+- チーム名抽出は Gemini → Mistral → OpenRouter の順で試行する。
+- Geminiが失敗した場合はMistral（無料のExperimentティア）、それも失敗した場合はOpenRouterの無料モデルを使う。
 
 ■ 再実行時の挙動
 - チームタグ付与が「試行済み」のentry IDは backfill_processed.txt に記録し、以後AI再抽出をスキップする
@@ -58,6 +62,7 @@ from main import (
     CATEGORY_LABELS,
     build_team_archive_url,
     call_gemini_with_retry,
+    call_mistral_fallback,
     call_openrouter_fallback,
 )
 
@@ -221,14 +226,8 @@ def fetch_all_entries():
 
 
 def extract_team_name(title, body_text):
-    """過去記事のタイトル・本文からAIでチーム名を再抽出する。main.pyのAIモデル呼び出しをそのまま再利用する。
-
-    戻り値は (team_name_or_None, api_succeeded) のタプル。
-    - api_succeeded=False : Gemini/OpenRouterともにAPI呼び出し自体が失敗した（クォータ切れ・ネットワークエラー等）。
-      この場合は「未試行」として扱い、次回実行時に再試行できるようにする（呼び出し元でbackfill_processed.txtに記録しない）。
-    - api_succeeded=True  : API呼び出しは成功した。team_nameがNoneの場合は「AIがチームを特定できないと判定した」ことを意味し、
-      これは正常な判定結果なので次回以降は再試行不要（呼び出し元でbackfill_processed.txtに記録する）。
-    """
+    """過去記事のタイトル・本文からAIでチーム名を再抽出する。
+    main.pyのAIモデル呼び出しをそのまま再利用し、Gemini→Mistral→OpenRouterの順でフォールバックする。"""
     prompt = f"""
 あなたはプロのスポーツ編集者です。以下は過去に投稿されたスポーツ移籍ニュース記事です。
 この記事の中心となるチーム・クラブ名を1つだけ特定してください。
@@ -243,17 +242,22 @@ def extract_team_name(title, body_text):
 - 出力はチーム名（または「不明」）の1行のみとし、説明・前置き・記号は一切不要です。
 """
     result = call_gemini_with_retry(prompt)
+
     if result is None:
-        print("Geminiでの抽出に失敗したため、OpenRouterへフォールバックします。")
+        print("Geminiでの抽出に失敗したため、Mistralへフォールバックします。")
+        result = call_mistral_fallback(prompt)
+
+    if result is None:
+        print("Mistralでの抽出にも失敗したため、OpenRouterへフォールバックします。")
         result = call_openrouter_fallback(prompt)
 
     if result is None:
-        return None, False  # API呼び出し自体が失敗（クォータ切れ等）。未試行扱いにする。
+        return None
 
     team_name = result.strip().split("\n")[0].strip()
     if team_name in ("", "不明", "None") or len(team_name) > 30:
-        return None, True  # API呼び出しは成功。AIが「不明」と判定した正常な結果。
-    return team_name.replace("\n", "").replace("/", "・").strip(), True
+        return None
+    return team_name.replace("\n", "").replace("/", "・").strip()
 
 
 def update_entry(entry_elem, team_name=None, new_body_html=None):
@@ -382,17 +386,14 @@ def main():
         processed_count += 1
 
         team_name = None
-        team_api_succeeded = True  # needs_teamがFalseの場合は記録判定に影響させないためTrue扱い
         if needs_team:
             print(f"[{processed_count}] チーム名抽出中: {title}")
-            team_name, team_api_succeeded = extract_team_name(title, strip_html(body_html))
+            team_name = extract_team_name(title, strip_html(body_html))
             time.sleep(API_CALL_INTERVAL_SECONDS)
             if team_name:
                 print(f"  → 抽出結果: {team_name}")
-            elif team_api_succeeded:
-                print("  → チーム名を特定できなかったため、チームタグの付与は見送ります。")
             else:
-                print("  → API呼び出し自体が失敗（クォータ切れ等）。次回実行時に再試行します。")
+                print("  → チーム名を特定できなかったため、チームタグの付与は見送ります。")
 
         if thumb_changed:
             print(f"[{processed_count}] サムネイル画像を同期します: {title}（category={category_code}）")
@@ -407,15 +408,9 @@ def main():
 
         if success:
             updated_count += 1
-            if needs_team and not DRY_RUN and team_api_succeeded:
-                # 「AIがチームを特定できないと正常に判定した」場合のみ試行済みとして記録し、
-                # 次回実行時に同じ記事へ無駄なAI呼び出しを繰り返さないようにする。
-                # API呼び出し自体が失敗した場合（クォータ切れ等）は記録しない。
-                # 記録してしまうと、クォータが回復した後の再実行でもこの記事だけ
-                # 永久にチーム名抽出がスキップされてしまうため。
-                # DRY RUN中は実際には何も更新していないため、ここで記録してはいけない
-                # （記録してしまうと、その後の本番実行時に「試行済み」と誤判定され、
-                #   チームタグが一切送信されなくなるバグになる）。
+            if needs_team:
+                # チーム名が特定できた/できなかったに関わらず「試行済み」として記録し、
+                # 次回実行時に同じ記事へ無駄なAI呼び出しを繰り返さないようにする
                 save_backfilled_id(entry_id)
                 backfilled_ids.add(entry_id)
 
