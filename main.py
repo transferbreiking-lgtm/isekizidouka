@@ -133,11 +133,16 @@ SPORT_QUERIES = {
 DB_FILE = "processed_urls.txt"
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")  # フォールバック用（無料枠）
+MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY")      # 第2フォールバック用
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")  # 第3フォールバック用（無料枠）
 LIVEDOOR_BLOG_ID = os.environ.get("LIVEDOOR_BLOG_ID")
 LIVEDOOR_API_KEY = os.environ.get("LIVEDOOR_API_KEY")
 # チーム別カテゴリアーカイブのURL組み立てに使う独自ドメイン（末尾スラッシュ必須）
 BLOG_BASE_URL = os.environ.get("BLOG_BASE_URL", "https://transferbreiking.officialblog.jp/")
+
+# Mistralのフォールバック先モデル（無料枠＝Experimentティアで使える汎用チャットモデル）
+# ※ 無料枠モデルはMistral側の都合で変わることがあるので、404が出たらモデル名を要確認。
+MISTRAL_MODEL = os.environ.get("MISTRAL_MODEL", "mistral-small-latest")
 
 # OpenRouterのフォールバック先モデル（無料枠モデル）
 # ※ deepseek/deepseek-chat-v3-0324:free は2026年7月時点で無料枠が廃止され有料化された。
@@ -357,7 +362,7 @@ def save_processed_url(url):
 
 
 def build_prompt(title, summary_text):
-    """Gemini/OpenRouter共通の指示文（プロンプト）を組み立てる"""
+    """Gemini/Mistral/OpenRouter共通の指示文（プロンプト）を組み立てる"""
     return f"""
 あなたはプロのスポーツライターです。
 与えられたニュースから「事実データ」のみを抽出し、元の文章の表現を一切真似せずに、読者がワクワクする完全オリジナルのコラム記事を1から執筆してください。
@@ -426,8 +431,42 @@ def call_gemini_with_retry(prompt):
     return None
 
 
+def call_mistral_fallback(prompt):
+    """Geminiがダメだったときの第2フォールバックとしてMistralを呼び出す（無料のExperimentティア）"""
+    if not MISTRAL_API_KEY:
+        print("MISTRAL_API_KEY が未設定のため、Mistralフォールバックをスキップします。")
+        return None
+
+    try:
+        response = requests.post(
+            url="https://api.mistral.ai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {MISTRAL_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": MISTRAL_MODEL,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+            },
+            timeout=60,
+        )
+        if response.status_code != 200:
+            print(f"Mistral APIエラー: ステータスコード {response.status_code} / {response.text[:300]}")
+            return None
+
+        data = response.json()
+        text = data["choices"][0]["message"]["content"].strip()
+        print(f"Mistral（{MISTRAL_MODEL}）で代替生成しました。")
+        return text
+    except Exception as e:
+        print(f"Mistral API 実行エラー: {e}")
+        return None
+
+
 def call_openrouter_fallback(prompt):
-    """GeminiがダメだったときのフォールバックとしてOpenRouterの無料モデルを呼び出す"""
+    """Gemini・Mistralの両方がダメだったときの第3フォールバックとしてOpenRouterの無料モデルを呼び出す"""
     if not OPENROUTER_API_KEY:
         print("OPENROUTER_API_KEY が未設定のため、フォールバックをスキップします。")
         return None
@@ -461,13 +500,17 @@ def call_openrouter_fallback(prompt):
 
 
 def check_and_summarize_with_gemini(title, summary_text):
-    """去就判定＋オリジナル記事生成。Gemini→(失敗時)OpenRouterの順で試す"""
+    """去就判定＋オリジナル記事生成。Gemini→(失敗時)Mistral→(それも失敗時)OpenRouterの順で試す"""
     prompt = build_prompt(title, summary_text)
 
     res_text = call_gemini_with_retry(prompt)
 
     if res_text is None:
-        print("Geminiでの生成に失敗したため、OpenRouterへフォールバックします。")
+        print("Geminiでの生成に失敗したため、Mistralへフォールバックします。")
+        res_text = call_mistral_fallback(prompt)
+
+    if res_text is None:
+        print("Mistralでの生成にも失敗したため、OpenRouterへフォールバックします。")
         res_text = call_openrouter_fallback(prompt)
 
     if res_text is None:
