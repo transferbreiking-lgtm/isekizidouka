@@ -404,7 +404,15 @@ SUMMARY:
 
 
 def call_gemini_with_retry(prompt):
-    """Geminiを呼び出す。429(レートリミット)の場合は待機して最大GEMINI_MAX_RETRIES回まで再試行する"""
+    """Geminiを呼び出す。429(レートリミット)の場合は待機して最大GEMINI_MAX_RETRIES回まで再試行する
+
+    ※ モデル名は "gemini-flash-latest"（自動追従エイリアス）ではなく "gemini-2.5-flash" に固定している。
+       自動追従エイリアスは2026年5月以降 Gemini 3.5 Flash を指すようになったが、
+       3.5 Flashは無料枠が1日20リクエストしかない（AI StudioのAPIキーで実測確認済み・2026年7月）。
+       Gemini 2.5 Flashは無料枠が1日1,500リクエストと大幅に余裕があるため、明示的にこちらへ固定する。
+       Googleが2.5 Flashを廃止した場合はエラーになるので、その際は "gemini-2.5-flash-lite" 等
+       無料枠の大きい型落ちモデルへの切り替えを検討すること。
+    """
     if not GEMINI_API_KEY:
         print("エラー: GEMINI_API_KEY が環境変数に設定されていません。")
         return None
@@ -414,7 +422,7 @@ def call_gemini_with_retry(prompt):
     for attempt in range(1, GEMINI_MAX_RETRIES + 1):
         try:
             response = client.models.generate_content(
-                model="gemini-flash-latest",
+                model="gemini-2.5-flash",
                 contents=prompt,
             )
             return response.text.strip()
