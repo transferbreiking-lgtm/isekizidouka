@@ -1,0 +1,459 @@
+/* ============================================================================
+   スポーツ移籍ニュース自動配信ブログ CSS（アメリカンスポーツニュース風・ダークテーマ統一版）
+   貼り付け先：ライブドアブログ管理画面 →「デザイン設定」→「デザイン／ブログパーツ設定」
+              →「PC」→「カスタマイズ」→「CSS」タブ
+
+   構成：
+   ① 配色設定（ここの色だけ変えれば全体の印象を変えられます）
+   ② ページ全体の背景（ヘッダーと同じ「スタジアム照明＋回路網」の雰囲気をbody全体に適用）
+   ③ 記事本文の中のデザイン（main.pyが投稿するHTMLに対応・確実に反映されます）
+   ④ サイト全体（ヘッダー・フッター・トップページ一覧）
+      → トップページ用HTML / 個別記事ページ用HTML と対で使ってください
+   ============================================================================ */
+
+
+/* ============================================================================
+   ① 配色設定
+   ============================================================================ */
+:root {
+    --accent-red: #e4002b;       /* ESPN・Bleacher Report系の差し色レッド */
+    --accent-orange: #ff8c00;    /* ヘッダーの「BREAKING」文字と同じオレンジ */
+    --dark-panel: #1a1a1a;
+    --page-bg: #0d0d0f;          /* ページ全体のベース色（ヘッダーと同じ黒） */
+    --text-main: #eaeaea;        /* ダークテーマ用の本文文字色 */
+    --text-sub: #9a9a9a;         /* 補足・日付などの文字色 */
+    --line-dark: rgba(255, 255, 255, 0.10);  /* ダーク背景用の区切り線 */
+    --card-bg: rgba(255, 255, 255, 0.04);    /* カード状パーツの背景 */
+}
+
+
+/* ============================================================================
+   ② ページ全体の背景
+   ヘッダーと同じ「左下：青いスタジアム照明のグロー」「右上：薄い回路網ドット」を
+   CSSのグラデーションだけで疑似的に再現し、body全体に固定表示します。
+   ============================================================================ */
+* { box-sizing: border-box; }
+
+html {
+    background-color: var(--page-bg);
+}
+
+body {
+    font-family: "Helvetica Neue", Arial, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    color: var(--text-main);
+    line-height: 1.7;
+    margin: 0;
+    background-color: var(--page-bg);
+    background-image:
+        radial-gradient(ellipse 700px 500px at 8% 92%, rgba(40, 110, 200, 0.28), transparent 60%),
+        radial-gradient(ellipse 500px 400px at 22% 100%, rgba(80, 180, 230, 0.16), transparent 60%),
+        radial-gradient(ellipse 600px 500px at 90% 10%, rgba(255, 140, 0, 0.06), transparent 60%),
+        repeating-linear-gradient(120deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 90px);
+    background-attachment: fixed, fixed, fixed, fixed;
+    background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+}
+
+
+/* ============================================================================
+   ③ 記事本文の中のデザイン（main.pyの出力に対応・確実に反映されます）
+   ============================================================================ */
+
+.article-outer {
+    max-width: 720px;
+    margin: 20px auto;
+    padding: 0 20px;
+    font-family: "Helvetica Neue", Arial, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    color: var(--text-main);
+    line-height: 1.8;
+}
+
+/* ============================================================================
+   コンテンツ＋サイドバーの2カラムレイアウト
+   ============================================================================ */
+.page-layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 32px;
+}
+.content-area {
+    flex: 1;
+    min-width: 0;
+}
+.sidebar {
+    flex: 0 0 240px;
+}
+.sidebar-box {
+    background-color: var(--card-bg);
+    border: 1px solid var(--line-dark);
+    padding: 18px;
+}
+.sidebar-heading {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: var(--accent-orange);
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--accent-red);
+}
+/* ライブドア公式「カテゴリー一覧」ブログパーツが生成するリンクの見た目をテーマに合わせる */
+.sidebar-box a {
+    color: var(--text-main);
+    text-decoration: none;
+    font-size: 13px;
+    line-height: 2;
+}
+.sidebar-box a:hover {
+    color: var(--accent-orange);
+}
+.sidebar-category-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.sidebar-category-list li {
+    border-bottom: 1px solid var(--line-dark);
+}
+.sidebar-category-list li:last-child {
+    border-bottom: none;
+}
+.sidebar-category-list a {
+    display: block;
+    padding: 8px 2px;
+}
+
+/* スマホ幅ではサイドバーを本文の下に回す（横幅が足りないため） */
+@media (max-width: 680px) {
+    .page-layout {
+        flex-direction: column;
+    }
+    .sidebar {
+        flex-basis: auto;
+        width: 100%;
+    }
+}
+
+/* パンくずリスト */
+.breadcrumb {
+    font-size: 12px;
+    color: var(--text-sub);
+    margin-bottom: 18px;
+}
+.breadcrumb a {
+    color: var(--text-sub);
+    text-decoration: none;
+}
+.breadcrumb a:hover {
+    color: var(--accent-orange);
+}
+.breadcrumb span {
+    color: var(--text-sub);
+}
+
+
+/* 記事本文冒頭のカテゴリサムネイル画像（<$ArticleFirstImage$>のソースにもなる） */
+.article-thumbnail {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: 0 0 24px;
+    border: 1px solid var(--line-dark);
+}
+
+/* 3行要約：太字の赤ナンバリングで見出し性を強調 */
+.summary-list {
+    list-style: none;
+    padding-left: 0;
+    margin: 0 0 30px;
+    counter-reset: summary-counter;
+}
+.summary-list li {
+    position: relative;
+    padding-left: 34px;
+    margin-bottom: 16px;
+    font-size: 16px;
+    color: var(--text-main);
+    counter-increment: summary-counter;
+}
+.summary-list li::before {
+    content: counter(summary-counter);
+    position: absolute;
+    left: 0;
+    top: -1px;
+    width: 22px;
+    height: 22px;
+    line-height: 22px;
+    text-align: center;
+    background-color: var(--accent-red);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 800;
+    border-radius: 2px;
+}
+
+/* 選手個人グッズ広告エリア */
+.personal-ad-box {
+    margin: 30px 0;
+    padding: 20px;
+    border: 1px solid var(--line-dark);
+    background-color: var(--card-bg);
+    text-align: center;
+}
+.personal-ad-box p {
+    margin: 0 0 12px 0;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    color: var(--text-main);
+    text-transform: uppercase;
+}
+.personal-ad-box a {
+    display: inline-block;
+    margin: 0 10px;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    border-bottom: 2px solid currentColor;
+    padding-bottom: 1px;
+}
+.ad-rakuten { color: #ff5c5c; }
+.ad-amazon { color: #ffb84d; }
+
+/* 配信プラットフォーム（VOD）広告エリア：ひときわ濃いパネルで目立たせる */
+.ad-section {
+    margin-top: 30px;
+    padding: 22px 20px;
+    background-color: var(--dark-panel);
+    border: 1px solid var(--line-dark);
+    text-align: center;
+}
+.ad-caption {
+    font-size: 10px;
+    color: var(--text-sub);
+    letter-spacing: 0.2em;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+}
+.ad-section a {
+    display: inline-block;
+    font-size: 15px;
+    font-weight: 800;
+    color: #ffffff;
+    text-decoration: none;
+    border-bottom: 2px solid var(--accent-red);
+    padding-bottom: 2px;
+}
+
+/* 出典（情報元URL）の注記部分 */
+.article-outer small {
+    color: var(--text-sub);
+}
+.article-outer small a {
+    color: #8a8a8a;
+    text-decoration: underline;
+}
+
+
+/* ============================================================================
+   ④ サイト全体（トップページ用HTML／個別記事ページ用HTMLと対応）
+   ============================================================================ */
+
+/* ヘッダー：黒背景に赤い下線、ロゴは白抜き太字 */
+.site-header {
+    background-color: var(--dark-panel);
+    border-bottom: 4px solid var(--accent-red);
+    padding: 22px 0;
+    text-align: center;
+}
+.site-logo {
+    font-size: 26px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #ffffff;
+    text-decoration: none;
+}
+/* オリジナルヘッダー画像（かんたんタイトル画像で設定した場合） */
+.site-logo-image {
+    display: inline-block;
+    max-width: 100%;
+    width: auto;
+    height: auto;
+    vertical-align: middle;
+}
+
+/* カテゴリ／月別アーカイブの見出しバー */
+.archive-title-bar {
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid var(--line-dark);
+}
+.archive-sub {
+    font-size: 14px;
+    color: var(--text-sub);
+    margin-left: 6px;
+}
+
+/* アーカイブページの前後ページリンク */
+.archive-pager {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 13px;
+}
+.archive-pager a {
+    color: var(--accent-orange);
+    text-decoration: none;
+    font-weight: 700;
+    margin: 0 10px;
+}
+
+/* メインコンテナ */
+.container {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 40px 20px;
+}
+
+/* トップページのタイムライン形式・記事1件分（左サムネ＋右テキストのカード構成） */
+.top-story-item {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 30px;
+    padding-bottom: 30px;
+    border-bottom: 1px solid var(--line-dark);
+}
+.story-thumb-link {
+    flex: 0 0 120px;
+    display: block;
+}
+.story-thumb {
+    display: block;
+    width: 120px;
+    height: 80px;
+    object-fit: cover;
+    border: 1px solid var(--line-dark);
+}
+.story-content {
+    flex: 1;
+    min-width: 0;
+}
+.story-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+.story-category {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 800;
+    color: #ffffff;
+    background-color: var(--accent-red);
+    padding: 3px 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-decoration: none;
+}
+.story-category:hover {
+    background-color: #b3001f;
+}
+.story-date {
+    font-size: 12px;
+    color: var(--text-sub);
+    letter-spacing: 0.03em;
+}
+.story-title {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 900;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+}
+.story-title a {
+    color: var(--text-main);
+    text-decoration: none;
+}
+.story-title a:hover {
+    color: var(--accent-orange);
+}
+.story-snippet {
+    margin: 8px 0 0;
+    color: var(--text-sub);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+/* 個別記事ページの記事タイトル（トップに出る大見出し） */
+.article-title-main {
+    font-size: 32px;
+    font-weight: 900;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    color: var(--text-main);
+    margin: 8px 0 0;
+}
+
+/* フッター */
+.site-footer {
+    text-align: center;
+    padding: 40px 0;
+    font-size: 11px;
+    color: #7a7a7a;
+    background-color: var(--dark-panel);
+    margin-top: 60px;
+}
+
+/* フッター内リンク（運営者情報・プライバシーポリシー・お問い合わせ） */
+.footer-links {
+    margin-bottom: 16px;
+}
+.footer-links a {
+    color: var(--text-sub);
+    text-decoration: none;
+    font-size: 12px;
+    margin: 0 12px;
+    white-space: nowrap;
+}
+.footer-links a:hover {
+    color: var(--accent-orange);
+}
+@media (max-width: 480px) {
+    .footer-links a {
+        display: inline-block;
+        margin: 4px 8px;
+    }
+}
+
+/* SNSシェアボタン（<$ArticleToolBox$>の枠） */
+.article-tools {
+    max-width: 720px;
+    margin: 30px auto 0;
+    padding: 20px 20px 0;
+    border-top: 1px solid var(--line-dark);
+}
+
+/* 関連記事（<$RelatedArticles$>の枠） */
+.related-articles {
+    max-width: 720px;
+    margin: 30px auto 0;
+    padding: 0 20px;
+}
+.related-articles .section-label {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    color: var(--accent-orange);
+    margin-bottom: 12px;
+}
+.related-articles a {
+    color: var(--text-main);
+}
+
+/* 広告枠（<$Advertise$>：無料プランのため規約上非表示・縮小不可。目立たない位置に配置） */
+.ad-slot {
+    max-width: 760px;
+    margin: 40px auto 0;
+    padding: 0 20px;
+    text-align: center;
+}

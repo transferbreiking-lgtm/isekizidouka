@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<$HeadSectionCommon$>
+<link rel="stylesheet" href="<$CSSUrl$>" type="text/css" />
+<title><$MonthLabel ESCAPE$> : <$BlogTitle ESCAPE$></title>
+</head>
+<body>
+
+<header class="site-header">
+    <a href="<$BlogUrl$>" class="site-logo">
+    <IfBlogHeaderImageUrl>
+    <img src="<$BlogHeaderImageUrl$>" width="<$BlogHeaderImageWidth$>" height="<$BlogHeaderImageHeight$>" alt="<$BlogTitle ESCAPE$>" class="site-logo-image" />
+    <Else>
+    <$BlogTitle ESCAPE$>
+    </IfBlogHeaderImageUrl>
+    </a>
+</header>
+
+<main class="container">
+  <div class="page-layout">
+    <div class="content-area">
+        <nav class="breadcrumb">
+            <a href="<$BlogUrl$>">HOME</a> &raquo; <span><$MonthLabel ESCAPE$></span>
+        </nav>
+
+        <div class="archive-title-bar">
+            <span class="story-category"><$MonthLabel ESCAPE$></span>
+            <span class="archive-sub">の記事一覧</span>
+        </div>
+
+        <MonthlyArticlesLoop>
+        <article class="top-story-item">
+            <IfArticleFirstImage>
+            <a href="<$ArticlePermalink$>" class="story-thumb-link">
+                <img src="<$ArticleFirstImage$>" alt="<$ArticleTitle ESCAPE$>" class="story-thumb" />
+            </a>
+            </IfArticleFirstImage>
+            <div class="story-content">
+            <div class="story-meta">
+                <IfArticleCategory1>
+                <a href="<$ArticleCategory1Url$>" class="story-category"><$ArticleCategory1$></a>
+                </IfArticleCategory1>
+                <IfArticleCategory2>
+                <a href="<$ArticleCategory2Url$>" class="story-category"><$ArticleCategory2$></a>
+                </IfArticleCategory2>
+                <span class="story-date"><$ArticleDate$></span>
+            </div>
+            <h2 class="story-title">
+                <a href="<$ArticlePermalink$>"><$ArticleTitle ESCAPE$></a>
+            </h2>
+            </div>
+        </article>
+        </MonthlyArticlesLoop>
+
+        <div class="archive-pager">
+            <IfPrevPage><a href="<$CurrentUrl$>?p=<$PrevPage$>">&laquo; 前のページへ</a></IfPrevPage>
+            <IfNextPage><a href="<$CurrentUrl$>?p=<$NextPage$>">次のページへ &raquo;</a></IfNextPage>
+        </div>
+    </div>
+
+    <aside class="sidebar">
+        <div class="sidebar-box">
+            <div class="sidebar-heading">CATEGORIES</div>
+            <ul class="sidebar-category-list">
+                <li><a href="<$BlogUrl$>category/サッカー">サッカー</a></li>
+                <li><a href="<$BlogUrl$>category/野球">野球</a></li>
+                <li><a href="<$BlogUrl$>category/バスケットボール">バスケットボール</a></li>
+                <li><a href="<$BlogUrl$>category/プロレス">プロレス</a></li>
+                <li><a href="<$BlogUrl$>category/格闘技">格闘技</a></li>
+                <li><a href="<$BlogUrl$>category/ボクシング">ボクシング</a></li>
+                <li><a href="<$BlogUrl$>category/バレーボール">バレーボール</a></li>
+                <li><a href="<$BlogUrl$>category/アメリカンフットボール">アメリカンフットボール</a></li>
+                <li><a href="<$BlogUrl$>category/アイスホッケー">アイスホッケー</a></li>
+                <li><a href="<$BlogUrl$>category/ラグビー">ラグビー</a></li>
+                <li><a href="<$BlogUrl$>category/クリケット">クリケット</a></li>
+                <li><a href="<$BlogUrl$>category/モータースポーツ">モータースポーツ</a></li>
+                <li><a href="<$BlogUrl$>category/スポーツ">スポーツ</a></li>
+            </ul>
+        </div>
+    </aside>
+  </div>
+</main>
+
+<div class="ad-slot">
+    <$Advertise$>
+</div>
+
+<footer class="site-footer">
+    <nav class="footer-links">
+        <a href="https://transferbreiking.officialblog.jp/archives/14106847.html">運営者情報</a>
+        <a href="https://transferbreiking.officialblog.jp/archives/14106850.html">プライバシーポリシー</a>
+        <a href="https://transferbreiking.officialblog.jp/archives/14106866.html">お問い合わせ</a>
+    </nav>
+    &copy; <$BlogTitle ESCAPE$>. All rights reserved.
+</footer>
+
+</body>
+</html>
