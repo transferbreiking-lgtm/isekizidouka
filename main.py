@@ -133,16 +133,11 @@ SPORT_QUERIES = {
 DB_FILE = "processed_urls.txt"
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY")      # 第2フォールバック用
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")  # 第3フォールバック用（無料枠）
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")  # フォールバック用（無料枠）
 LIVEDOOR_BLOG_ID = os.environ.get("LIVEDOOR_BLOG_ID")
 LIVEDOOR_API_KEY = os.environ.get("LIVEDOOR_API_KEY")
 # チーム別カテゴリアーカイブのURL組み立てに使う独自ドメイン（末尾スラッシュ必須）
 BLOG_BASE_URL = os.environ.get("BLOG_BASE_URL", "https://transferbreiking.officialblog.jp/")
-
-# Mistralのフォールバック先モデル（無料枠＝Experimentティアで使える汎用チャットモデル）
-# ※ 無料枠モデルはMistral側の都合で変わることがあるので、404が出たらモデル名を要確認。
-MISTRAL_MODEL = os.environ.get("MISTRAL_MODEL", "mistral-small-latest")
 
 # OpenRouterのフォールバック先モデル（無料枠モデル）
 # ※ deepseek/deepseek-chat-v3-0324:free は2026年7月時点で無料枠が廃止され有料化された。
@@ -180,61 +175,55 @@ THUMBNAIL_IMAGES = {
 }
 
 # 競技カテゴリごとのアフィリエイト広告（ad-sectionに表示するリンク）
-# ※ 複数ASPを混在させる場合も、リスト内にHTMLリンク文字列をそのまま追加すればよい
-#    （投稿のたびに random.choice でランダムローテーションされ、自動でA/Bテストになる）。
-# ※ A8.netにはDAZN・U-NEXTの取り扱いがないため、DAZN案件はアクセストレード、
-#    U-NEXT案件はバリューコマースで別途提携し、そのリンクをここに追加している。
-# ※ 下記の "XXXXXX" 部分は全てプレースホルダー。各ASPの管理画面で発行した
-#    実際の素材コード（rk=... / sid=...&pid=... 等）に差し替えること。
+# ※ 2026年7月22日時点の運用方針：
+#    DAZN単独／DMM×DAZNホーダイ／U-NEXTは、アクセストレード（審査落選）・A8.net（取り扱い無し）・
+#    もしもアフィリエイト（取り扱い無し）・バリューコマース（取り扱い見当たらず）・afb（未登録）・
+#    Felmat（クローズドASPのため対象外）と、あらゆるルートで提携が進まなかったため、いったん撤退。
+#    かわりに、A8.netで既に提携済み・審査不要で確実に動く「ABEMA」の実リンク1本に、
+#    全カテゴリを統一した。カテゴリごとに文言だけ変えてある。
+#    今後、他ASPでDAZN/U-NEXT等の審査が通った場合は、該当カテゴリのリストにリンクを追加すれば
+#    自動でランダムローテーション（A/Bテスト）に組み込まれる（このリスト構造自体は維持）。
+ABEMA_AFFILIATE_URL = "https://px.a8.net/svt/ejp?a8mat=4B878W+CTF8MY+4EKC+60WN6"
+
 AFFILIATE_ADS = {
     "SOCCER": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】海外サッカーを見るならこちら</a>',
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】海外サッカーを見るならこちら</a>',
+        f'<a href="{ABEMA_AFFILIATE_URL}" target="_blank" rel="nofollow noopener">【ABEMA】海外サッカー・国内サッカー配信はこちら</a>',
     ],
     "BASEBALL": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】メジャー・プロ野球の生中継はこちら</a>',
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】メジャー・プロ野球の生中継はこちら</a>',
+        f'<a href="{ABEMA_AFFILIATE_URL}" target="_blank" rel="nofollow noopener">【ABEMA】プロ野球・メジャーリーグ関連配信はこちら</a>',
     ],
     "BASKETBALL": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NBA・Bリーグの生中継はこちら</a>',
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NBA・Bリーグの生中継はこちら</a>',
+        f'<a href="{ABEMA_AFFILIATE_URL}" target="_blank" rel="nofollow noopener">【ABEMA】NBA・Bリーグ関連配信はこちら</a>',
     ],
     "WRESTLING": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-ABEMA" target="_blank" rel="nofollow noopener">【ABEMA】プロレス配信はこちら</a>',
+        f'<a href="{ABEMA_AFFILIATE_URL}" target="_blank" rel="nofollow noopener">【ABEMA】プロレス配信はこちら</a>',
     ],
     "COMBAT_SPORTS": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-UNEXT" target="_blank" rel="nofollow noopener">【U-NEXT】UFC・RIZIN配信はこちら</a>',
-        '<a href="https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=XXXXXX&pid=XXXXXX-UNEXT" target="_blank" rel="nofollow noopener">【U-NEXT】UFC・RIZIN配信はこちら</a>',
+        f'<a href="{ABEMA_AFFILIATE_URL}" target="_blank" rel="nofollow noopener">【ABEMA】格闘技・MMA配信はこちら</a>',
     ],
     "BOXING": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-UNEXT" target="_blank" rel="nofollow noopener">【U-NEXT】世界戦のライブ配信はこちら</a>',
-        '<a href="https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=XXXXXX&pid=XXXXXX-UNEXT" target="_blank" rel="nofollow noopener">【U-NEXT】世界戦のライブ配信はこちら</a>',
+        f'<a href="{ABEMA_AFFILIATE_URL}" target="_blank" rel="nofollow noopener">【ABEMA】ボクシング世界戦配信はこちら</a>',
     ],
     "VOLLEYBALL": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】バレーボール中継はこちら</a>',
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】バレーボール中継はこちら</a>',
+        f'<a href="{ABEMA_AFFILIATE_URL}" target="_blank" rel="nofollow noopener">【ABEMA】バレーボール関連配信はこちら</a>',
     ],
     "AMERICAN_FOOTBALL": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NFL生中継はこちら</a>',
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NFL生中継はこちら</a>',
+        f'<a href="{ABEMA_AFFILIATE_URL}" target="_blank" rel="nofollow noopener">【ABEMA】アメリカンフットボール関連配信はこちら</a>',
     ],
     "ICE_HOCKEY": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NHL生中継はこちら</a>',
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】NHL生中継はこちら</a>',
+        f'<a href="{ABEMA_AFFILIATE_URL}" target="_blank" rel="nofollow noopener">【ABEMA】アイスホッケー関連配信はこちら</a>',
     ],
     "RUGBY": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】ラグビー中継はこちら</a>',
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】ラグビー中継はこちら</a>',
+        f'<a href="{ABEMA_AFFILIATE_URL}" target="_blank" rel="nofollow noopener">【ABEMA】ラグビー関連配信はこちら</a>',
     ],
     "CRICKET": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-VOD" target="_blank" rel="nofollow noopener">【配信サービス】クリケット中継はこちら</a>',
+        f'<a href="{ABEMA_AFFILIATE_URL}" target="_blank" rel="nofollow noopener">【ABEMA】クリケット関連配信はこちら</a>',
     ],
     "MOTORSPORT": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】F1・MotoGP生中継はこちら</a>',
-        '<a href="https://px.affiliate.accesstrade.net/km_r?rk=XXXXXX-DAZN" target="_blank" rel="nofollow noopener">【DAZN】F1・MotoGP生中継はこちら</a>',
+        f'<a href="{ABEMA_AFFILIATE_URL}" target="_blank" rel="nofollow noopener">【ABEMA】F1・MotoGP関連配信はこちら</a>',
     ],
     "OTHER": [
-        '<a href="https://px.a8.net/svt/ejp?a8mat=XXXXXX-VOD" target="_blank" rel="nofollow noopener">【注目】人気のスポーツ配信サービスはこちら</a>',
+        f'<a href="{ABEMA_AFFILIATE_URL}" target="_blank" rel="nofollow noopener">【ABEMA】注目のスポーツ配信サービスはこちら</a>',
     ],
 }
 
@@ -362,7 +351,7 @@ def save_processed_url(url):
 
 
 def build_prompt(title, summary_text):
-    """Gemini/Mistral/OpenRouter共通の指示文（プロンプト）を組み立てる"""
+    """Gemini/OpenRouter共通の指示文（プロンプト）を組み立てる"""
     return f"""
 あなたはプロのスポーツライターです。
 与えられたニュースから「事実データ」のみを抽出し、元の文章の表現を一切真似せずに、読者がワクワクする完全オリジナルのコラム記事を1から執筆してください。
@@ -404,15 +393,7 @@ SUMMARY:
 
 
 def call_gemini_with_retry(prompt):
-    """Geminiを呼び出す。429(レートリミット)の場合は待機して最大GEMINI_MAX_RETRIES回まで再試行する
-
-    ※ モデル名は "gemini-flash-latest"（自動追従エイリアス）ではなく "gemini-2.5-flash" に固定している。
-       自動追従エイリアスは2026年5月以降 Gemini 3.5 Flash を指すようになったが、
-       3.5 Flashは無料枠が1日20リクエストしかない（AI StudioのAPIキーで実測確認済み・2026年7月）。
-       Gemini 2.5 Flashは無料枠が1日1,500リクエストと大幅に余裕があるため、明示的にこちらへ固定する。
-       Googleが2.5 Flashを廃止した場合はエラーになるので、その際は "gemini-2.5-flash-lite" 等
-       無料枠の大きい型落ちモデルへの切り替えを検討すること。
-    """
+    """Geminiを呼び出す。429(レートリミット)の場合は待機して最大GEMINI_MAX_RETRIES回まで再試行する"""
     if not GEMINI_API_KEY:
         print("エラー: GEMINI_API_KEY が環境変数に設定されていません。")
         return None
@@ -422,7 +403,7 @@ def call_gemini_with_retry(prompt):
     for attempt in range(1, GEMINI_MAX_RETRIES + 1):
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-flash-latest",
                 contents=prompt,
             )
             return response.text.strip()
@@ -439,42 +420,8 @@ def call_gemini_with_retry(prompt):
     return None
 
 
-def call_mistral_fallback(prompt):
-    """Geminiがダメだったときの第2フォールバックとしてMistralを呼び出す（無料のExperimentティア）"""
-    if not MISTRAL_API_KEY:
-        print("MISTRAL_API_KEY が未設定のため、Mistralフォールバックをスキップします。")
-        return None
-
-    try:
-        response = requests.post(
-            url="https://api.mistral.ai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {MISTRAL_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": MISTRAL_MODEL,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ],
-            },
-            timeout=60,
-        )
-        if response.status_code != 200:
-            print(f"Mistral APIエラー: ステータスコード {response.status_code} / {response.text[:300]}")
-            return None
-
-        data = response.json()
-        text = data["choices"][0]["message"]["content"].strip()
-        print(f"Mistral（{MISTRAL_MODEL}）で代替生成しました。")
-        return text
-    except Exception as e:
-        print(f"Mistral API 実行エラー: {e}")
-        return None
-
-
 def call_openrouter_fallback(prompt):
-    """Gemini・Mistralの両方がダメだったときの第3フォールバックとしてOpenRouterの無料モデルを呼び出す"""
+    """GeminiがダメだったときのフォールバックとしてOpenRouterの無料モデルを呼び出す"""
     if not OPENROUTER_API_KEY:
         print("OPENROUTER_API_KEY が未設定のため、フォールバックをスキップします。")
         return None
@@ -508,17 +455,13 @@ def call_openrouter_fallback(prompt):
 
 
 def check_and_summarize_with_gemini(title, summary_text):
-    """去就判定＋オリジナル記事生成。Gemini→(失敗時)Mistral→(それも失敗時)OpenRouterの順で試す"""
+    """去就判定＋オリジナル記事生成。Gemini→(失敗時)OpenRouterの順で試す"""
     prompt = build_prompt(title, summary_text)
 
     res_text = call_gemini_with_retry(prompt)
 
     if res_text is None:
-        print("Geminiでの生成に失敗したため、Mistralへフォールバックします。")
-        res_text = call_mistral_fallback(prompt)
-
-    if res_text is None:
-        print("Mistralでの生成にも失敗したため、OpenRouterへフォールバックします。")
+        print("Geminiでの生成に失敗したため、OpenRouterへフォールバックします。")
         res_text = call_openrouter_fallback(prompt)
 
     if res_text is None:
