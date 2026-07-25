@@ -28,13 +28,13 @@ main.py と同じディレクトリに置いて実行すること（main.py の�
      DRY_RUN=false python backfill_team_categories.py
 
 ■ 環境変数
-- GEMINI_API_KEY / MISTRAL_API_KEY / OPENROUTER_API_KEY / LIVEDOOR_BLOG_ID / LIVEDOOR_API_KEY : main.py と共通
+- GEMINI_API_KEY / OPENROUTER_API_KEY / LIVEDOOR_BLOG_ID / LIVEDOOR_API_KEY : main.py と共通
 - DRY_RUN : "false" を指定すると実際に更新を実行する（未指定時は "true" 扱いでログ出力のみ）
 - MAX_ENTRIES : 1回の実行で処理する最大記事数（未指定なら無制限）
 
 ■ AIフォールバック順（main.pyと共通）
-- チーム名抽出は Gemini → Mistral → OpenRouter の順で試行する。
-- Geminiが失敗した場合はMistral（無料のExperimentティア）、それも失敗した場合はOpenRouterの無料モデルを使う。
+- チーム名抽出は Gemini → OpenRouter の順で試行する。
+- Geminiが失敗した場合はOpenRouterの無料モデルを使う。
 
 ■ 再実行時の挙動
 - チームタグ付与が「試行済み」のentry IDは backfill_processed.txt に記録し、以後AI再抽出をスキップする
@@ -62,7 +62,6 @@ from main import (
     CATEGORY_LABELS,
     build_team_archive_url,
     call_gemini_with_retry,
-    call_mistral_fallback,
     call_openrouter_fallback,
 )
 
@@ -227,7 +226,7 @@ def fetch_all_entries():
 
 def extract_team_name(title, body_text):
     """過去記事のタイトル・本文からAIでチーム名を再抽出する。
-    main.pyのAIモデル呼び出しをそのまま再利用し、Gemini→Mistral→OpenRouterの順でフォールバックする。"""
+    main.pyのAIモデル呼び出しをそのまま再利用し、Gemini→OpenRouterの順でフォールバックする。"""
     prompt = f"""
 あなたはプロのスポーツ編集者です。以下は過去に投稿されたスポーツ移籍ニュース記事です。
 この記事の中心となるチーム・クラブ名を1つだけ特定してください。
@@ -244,11 +243,7 @@ def extract_team_name(title, body_text):
     result = call_gemini_with_retry(prompt)
 
     if result is None:
-        print("Geminiでの抽出に失敗したため、Mistralへフォールバックします。")
-        result = call_mistral_fallback(prompt)
-
-    if result is None:
-        print("Mistralでの抽出にも失敗したため、OpenRouterへフォールバックします。")
+        print("Geminiでの抽出に失敗したため、OpenRouterへフォールバックします。")
         result = call_openrouter_fallback(prompt)
 
     if result is None:
