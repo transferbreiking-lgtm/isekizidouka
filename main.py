@@ -137,7 +137,7 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")  # フォールバッ�
 LIVEDOOR_BLOG_ID = os.environ.get("LIVEDOOR_BLOG_ID")
 LIVEDOOR_API_KEY = os.environ.get("LIVEDOOR_API_KEY")
 # チーム別カテゴリアーカイブのURL組み立てに使う独自ドメイン（末尾スラッシュ必須）
-BLOG_BASE_URL = os.environ.get("BLOG_BASE_URL", "https://transferbreiking.officialblog.jp/")
+BLOG_BASE_URL = os.environ.get("BLOG_BASE_URL", "https://transferbreaking.officialblog.jp/")
 
 # OpenRouterのフォールバック先モデル（無料枠モデル）
 # ※ deepseek/deepseek-chat-v3-0324:free は2026年7月時点で無料枠が廃止され有料化された。
