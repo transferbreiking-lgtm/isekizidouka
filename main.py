@@ -14,16 +14,32 @@ from googlenewsdecoder import new_decoderv1
 # -----------------------------------------------------------------------------
 # 1. 設定・環境変数
 # -----------------------------------------------------------------------------
-# ① 検証済みの公式RSSフィード（そのまま使えるURL）
-RSS_URLS = [
-    "https://web.gekisaka.jp/feed",                        # ゲキサカ 全体
-    "https://web.gekisaka.jp/feed?category=nationalteam",  # ゲキサカ 日本代表
-    "https://web.gekisaka.jp/feed?category=domestic",      # ゲキサカ Jリーグ・国内
-    "https://web.gekisaka.jp/feed?category=youth",         # ゲキサカ 高校&大学
-    "https://web.gekisaka.jp/feed?category=foreign",       # ゲキサカ 海外サッカー
-    "https://feeds.bbci.co.uk/sport/football/rss.xml",     # BBC Sport Football
-    "https://www.mlbtraderumors.com/feed",                 # MLB Trade Rumors
-]
+# ① 検証済みの公式RSSフィード（そのまま使えるURL）。カテゴリ別に辞書化しておくことで、
+#    main()側でカテゴリ単位に公平抽選できるようにする（サッカーだけフィード数が圧倒的に
+#    多く、フラットな1本のリストでシャッフルすると統計的にサッカーへ投稿が偏るため）。
+RSS_URLS_BY_CATEGORY = {
+    "SOCCER": [
+        "https://web.gekisaka.jp/feed",                        # ゲキサカ 全体
+        "https://web.gekisaka.jp/feed?category=nationalteam",  # ゲキサカ 日本代表
+        "https://web.gekisaka.jp/feed?category=domestic",      # ゲキサカ Jリーグ・国内
+        "https://web.gekisaka.jp/feed?category=youth",         # ゲキサカ 高校&大学
+        "https://web.gekisaka.jp/feed?category=foreign",       # ゲキサカ 海外サッカー
+        "https://feeds.bbci.co.uk/sport/football/rss.xml",     # BBC Sport Football
+        "https://www.espn.com/espn/rss/soccer/news",           # ESPN Soccer（海外ソース強化・2026/7/27実在確認済み）
+    ],
+    "BASEBALL": [
+        "https://www.mlbtraderumors.com/feed",                 # MLB Trade Rumors
+    ],
+    "BASKETBALL": [
+        "https://www.espn.com/espn/rss/nba/news",              # ESPN NBA（2026/7/27実在確認済み）
+    ],
+    "AMERICAN_FOOTBALL": [
+        "https://www.espn.com/espn/rss/nfl/news",              # ESPN NFL（同上）
+    ],
+    "ICE_HOCKEY": [
+        "https://www.espn.com/espn/rss/nhl/news",              # ESPN NHL（同上）
+    ],
+}
 
 # ② Google Newsキーワード検索RSS（世界中のプロスポーツを競技別に網羅）
 #    Yahoo!ニュースとNPB.jpは方針により除外(-site:)している。
@@ -131,6 +147,72 @@ SPORT_QUERIES = {
     ],
 }
 
+# ③ 英語版Google Newsキーワード検索（海外メディア発の一次情報を拾うための構成）。
+#    hl=ja&gl=JPのクエリは「海外リーグの話題」でも「日本語メディアが翻訳・要約した記事」しか
+#    拾えないため、情報元ドメインが国内メディアに偏る問題があった（2026/7/27診断）。
+#    hl=en&gl=USで検索することで、BBC・ESPN・Sky Sports・Marca等の海外メディア本体の記事を
+#    直接ソースにできるようにする。国内4割・海外6割の比率を目指す構成。
+SPORT_QUERIES_EN = {
+    "SOCCER": [
+        "Premier League transfer",
+        "La Liga transfer news",
+        "Serie A transfer news",
+        "Bundesliga transfer",
+        "Ligue 1 transfer",
+        "MLS transfer news",
+        "football transfer deal",
+        "club confirms signing football",
+        "loan deal football transfer",
+        "free transfer football",
+    ],
+    "BASEBALL": [
+        "MLB trade rumors",
+        "MLB free agent signing",
+        "MLB trade deadline deal",
+    ],
+    "BASKETBALL": [
+        "NBA trade rumors",
+        "NBA free agency signing",
+        "NBA trade deadline deal",
+    ],
+    "WRESTLING": [
+        "WWE signs wrestler",
+        "AEW signs wrestler",
+        "wrestler released contract",
+    ],
+    "COMBAT_SPORTS": [
+        "UFC signs fighter",
+        "UFC fighter contract",
+    ],
+    "BOXING": [
+        "boxer signs promotional deal",
+        "boxing world title fight signed",
+    ],
+    "VOLLEYBALL": [
+        "volleyball transfer signing",
+    ],
+    "AMERICAN_FOOTBALL": [
+        "NFL trade rumors",
+        "NFL free agency signing",
+    ],
+    "ICE_HOCKEY": [
+        "NHL trade rumors",
+        "NHL free agency signing",
+    ],
+    "RUGBY": [
+        "rugby union transfer signing",
+        "Premiership Rugby signing",
+    ],
+    "CRICKET": [
+        "IPL auction signing",
+        "cricket transfer signing",
+    ],
+    "MOTORSPORT": [
+        "F1 driver signs contract",
+        "MotoGP rider signs contract",
+    ],
+}
+
 DB_FILE = "processed_urls.txt"
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -228,6 +310,49 @@ AFFILIATE_ADS = {
     ],
 }
 
+# 物販系のA8.net案件（総合スポーツ用品通販）。2026/7/27に提携確認済み。
+# 動画配信(ABEMA)とは別枠として記事下部にもう1本表示し、視聴目的とは違う「グッズを買いたい」
+# 読者の受け皿にする。全カテゴリ共通の総合通販サイトのため、AFFILIATE_ADSとは別のリストで持ち、
+# build_goods_ad_html()内でランダム抽選＋team_nameを使った訴求文を組み立てる。
+# 各案件のimgタグ（1x1透過ピクセル）はA8.net側のインプレッション計測用のため、削除しないこと。
+GOODS_AFFILIATE_ADS = [
+    {
+        "name": "スーパースポーツゼビオ",
+        "html": (
+            '<a href="https://px.a8.net/svt/ejp?a8mat=4B8ACQ+FT6P4Q+4ABU+5YJRM" target="_blank" rel="nofollow noopener">{link_text}</a>'
+            '<img border="0" width="1" height="1" src="https://www15.a8.net/0.gif?a8mat=4B8ACQ+FT6P4Q+4ABU+5YJRM" alt="">'
+        ),
+    },
+    {
+        "name": "ムラサキスポーツ",
+        "html": (
+            '<a href="https://px.a8.net/svt/ejp?a8mat=4B8ACQ+FUDKCA+5MZI+5YRHE" target="_blank" rel="nofollow noopener">{link_text}</a>'
+            '<img border="0" width="1" height="1" src="https://www12.a8.net/0.gif?a8mat=4B8ACQ+FUDKCA+5MZI+5YRHE" alt="">'
+        ),
+    },
+    {
+        "name": "スポーツデポ",
+        "html": (
+            '<a href="https://px.a8.net/svt/ejp?a8mat=4B8ACQ+FTS4QI+3OSK+5YJRM" target="_blank" rel="nofollow noopener">{link_text}</a>'
+            '<img border="0" width="1" height="1" src="https://www18.a8.net/0.gif?a8mat=4B8ACQ+FTS4QI+3OSK+5YJRM" alt="">'
+        ),
+    },
+]
+
+# team_nameが完全一致した場合に優先表示する「その対象そのものの商品」へのA8.net商品リンク
+# （楽天商品リンク検索・Amazon商品リンク検索から個別に手動生成したもの）。
+# GOODS_AFFILIATE_ADS（総合スポーツ用品店のトップページリンク）より、記事内容と直結した
+# 具体的な商品の方がCVRが高いため、該当があればこちらを優先する（build_goods_ad_html参照）。
+# 商品はモデルチェンジ・完売等で陳腐化するため、定期的な手動更新が前提の構成。
+TEAM_GOODS_ADS = {
+    "日本代表": [
+        (
+            '<a href="https://rpx.a8.net/svt/ejp?a8mat=1U7G8F+1Y9G6Y+2HOM+BWGDT&rakuten=y&a8ejpredirect=https%3A%2F%2Fhb.afl.rakuten.co.jp%2Fhgc%2Fg00r3jp4.2bo11c31.g00r3jp4.2bo12562%2Fa04081397281_1U7G8F_1Y9G6Y_2HOM_BWGDT%3Fpc%3Dhttps%253A%252F%252Fitem.rakuten.co.jp%252Fhimaraya%252F0000001299356%252F%26m%3Dhttp%253A%252F%252Fm.rakuten.co.jp%252Fhimaraya%252Fi%252F10629520%252F%26rafcid%3Dwsc_i_is_a9f492a7-8ef9-40e2-ab89-4bc43a1ee283" target="_blank" rel="nofollow noopener">アディダス(adidas) サッカー日本代表 2026 ホーム レプリカユニフォームはこちら【楽天市場】</a>'
+            '<img border="0" width="1" height="1" src="https://www12.a8.net/0.gif?a8mat=1U7G8F+1Y9G6Y+2HOM+BWGDT" alt="">'
+        ),
+    ],
+}
+
 # GeminiのCATEGORY選択肢
 CATEGORY_LIST_TEXT = ", ".join(list(AFFILIATE_ADS.keys()))
 
@@ -274,6 +399,16 @@ SOURCE_SITE_NAMES = {
     "mlb.com": "MLB.com",
     "nba.com": "NBA.com",
     "mlbtraderumors.com": "MLB Trade Rumors",
+    "nfl.com": "NFL.com",
+    "nhl.com": "NHL.com",
+    "cbssports.com": "CBS Sports",
+    "foxsports.com": "Fox Sports",
+    "si.com": "Sports Illustrated",
+    "sportingnews.com": "Sporting News",
+    "talksport.com": "talkSPORT",
+    "standard.co.uk": "Evening Standard",
+    "football365.com": "Football365",
+    "90min.com": "90min",
     "web.gekisaka.jp": "ゲキサカ",
     "gekisaka.jp": "ゲキサカ",
     "news.google.com": "Google News",
@@ -283,19 +418,25 @@ SOURCE_SITE_NAMES = {
 # -----------------------------------------------------------------------------
 # 2. 各種処理を行う関数群
 # -----------------------------------------------------------------------------
-def build_google_news_rss(query):
-    """キーワードをGoogle Newsの検索RSS URLに変換する"""
+def build_google_news_rss(query, hl="ja", gl="JP"):
+    """キーワードをGoogle Newsの検索RSS URLに変換する（hl/glで検索対象の言語圏を切り替え可能）"""
     encoded_query = urllib.parse.quote_plus(query)
-    return f"https://news.google.com/rss/search?q={encoded_query}&hl=ja&gl=JP&ceid=JP:ja"
+    ceid = f"{gl}:{hl}"
+    return f"https://news.google.com/rss/search?q={encoded_query}&hl={hl}&gl={gl}&ceid={ceid}"
 
 
-def get_all_rss_urls():
-    """公式RSS一覧 と 競技別Google Newsキーワード検索RSS一覧をまとめて返す"""
-    google_news_urls = []
-    for queries in SPORT_QUERIES.values():
-        for q in queries:
-            google_news_urls.append(build_google_news_rss(q))
-    return RSS_URLS + google_news_urls
+def get_rss_urls_by_category():
+    """カテゴリごとに「公式RSS + 国内語Google News検索 + 英語Google News検索」をまとめた辞書を返す。
+    main()側でカテゴリを先に抽選してからフィードを巡回するために使う（フラットな1本のリストで
+    シャッフルすると、フィード数が多いカテゴリ＝サッカーに投稿が統計的に偏ってしまうため）。"""
+    categories = set(RSS_URLS_BY_CATEGORY) | set(SPORT_QUERIES) | set(SPORT_QUERIES_EN)
+    result = {}
+    for cat in categories:
+        urls = list(RSS_URLS_BY_CATEGORY.get(cat, []))
+        urls += [build_google_news_rss(q, hl="ja", gl="JP") for q in SPORT_QUERIES.get(cat, [])]
+        urls += [build_google_news_rss(q, hl="en", gl="US") for q in SPORT_QUERIES_EN.get(cat, [])]
+        result[cat] = urls
+    return result
 
 
 def get_source_name(url):
@@ -374,10 +515,14 @@ def build_prompt(title, summary_text):
 CATEGORY: [{CATEGORY_LIST_TEXT} のいずれかから、最も近いものを選んでください]
 PLAYER_NAME: [ニュースの中心となる選手名を1名だけ、フルネームで記載してください。チーム全体の話題などで個人名が特定できない場合は「不明」と記載してください]
 TEAM_NAME: [この移籍・契約等の中心となるチーム・クラブ名を1つだけ記載してください（移籍の場合は移籍先チームを優先。移籍先が未定・不明な場合は移籍元チームでも可）。正式名称または日本のメディアで一般的に使われる表記で、20文字以内で簡潔に記載してください（例: レアル・マドリード、読売ジャイアンツ、レイカーズ）。特定のチームに紐づかない話題（代表選考の一般論など）の場合は「不明」と記載してください]
-TITLE: [Step2で決めた独自の切り口を反映した、ファンが読みたくなるキャッチーなオリジナル独自タイトル。対象ニュースの見出しの事実をそのまま言い換えただけのタイトルにはしないこと]
+TITLE: [以下の2つの条件を両方満たすタイトルを作成してください。
+  条件1（SEO）：冒頭18〜20文字以内に「誰が」「何が起きたか（移籍/契約延長/退団など）」が伝わる言葉を置くこと。検索結果やSNSでは後半が表示されずに切れることがあるため、前半だけ読んでも内容が分かるようにする。タイトル全体は30〜38文字程度に収め、長くしすぎないこと。
+  条件2（感情移入）：後半にStep2で決めた独自の切り口を反映しつつ、読者（ファン）の感情（期待・興奮・不安・誇り・悔しさなど）を動かす一言を加えること。事実の言い換えではなく、読者が「気になる」「応援したくなる」と感じる表現にする。
+  対象ニュースの見出しの事実をそのまま言い換えただけのタイトルにはしないこと]
 SUMMARY:
 ・（1行目：まず記事内容が「移籍」「残留・契約延長」「退団・契約解除」「契約更改」「スポンサー契約」「解雇」など何の話かを判断し、さらに公式発表済みか、現地報道・噂段階かを判断する。その2つの情報を反映した短いラベル（4〜10文字程度）を自分で作って行頭に付け、内容を1文で記述する）
 ・【戦力的な影響・見どころ】（この移籍・契約等によってチームがどう変わるか、どのような影響が期待されるかをあなたの言葉で1行で解説）
+・【ファンの期待値・注目度】（この話題について、ファン・サポーターがどんな感情を抱きそうか、なぜ応援したくなるのか・注目すべきなのかを、あなたの言葉で1行で解説。単なる感想ではなく、実績や過去の経緯など事実に基づいた根拠を添えること）
 ・【今後の注目ポイント】（今後のチーム編成や本人の去就に与える影響などをあなたの言葉で1行で解説）
 
 ■ SUMMARY出力時の重要な注意
@@ -528,17 +673,34 @@ def build_team_archive_url(team_name):
     return f"{BLOG_BASE_URL.rstrip('/')}/category/{encoded_team}"
 
 
+def build_goods_ad_html(category, player_name, team_name):
+    """物販系のA8.net広告を1件選んで埋め込む。
+    team_nameがTEAM_GOODS_ADSに完全一致する場合は、その対象そのものの具体的な商品リンク
+    （例：日本代表記事→日本代表ユニフォーム）を優先表示する。記事内容と直結した商品の方が
+    総合スポーツ用品店のトップページリンクよりCVRが高いため。該当が無ければGOODS_AFFILIATE_ADS
+    （総合スポーツ用品店）にフォールバックし、team_name/player_nameを使った訴求文を添える。"""
+    if team_name and team_name in TEAM_GOODS_ADS:
+        return random.choice(TEAM_GOODS_ADS[team_name])
+
+    ad = random.choice(GOODS_AFFILIATE_ADS)
+    if team_name:
+        subject = team_name
+    elif player_name:
+        subject = player_name
+    else:
+        subject = CATEGORY_LABELS.get(category, CATEGORY_LABELS["OTHER"])
+    link_text = f"{subject}関連のグッズを探すなら【{ad['name']}】"
+    return ad["html"].format(link_text=link_text)
+
+
 def build_blog_body(category, player_name, team_name, summary_lines, source_url):
     """元デザイン（3行要約リスト・選手グッズ個別リンク・VOD広告）に沿った記事本文HTMLを組み立てる"""
     summary_html = "\n".join(f"            <li>{line}</li>" for line in summary_lines)
 
     # 楽天・Amazonは現在未提携のため広告表示なし（提携完了後に再実装する）。
-    # player_name・team_nameは本文生成では現状未使用（team_nameは記事上部の赤バッジ用にsend_to_blog側で使用する）。
-    _ = player_name  # 現状未使用（将来の選手別A8案件マッチング用に保持）
-    _ = team_name  # 記事下部バナーは親カテゴリ固定に戻したため本文生成では未使用
-
     ad_candidates = AFFILIATE_ADS.get(category, AFFILIATE_ADS["OTHER"])
     vod_ad_html = random.choice(ad_candidates)
+    goods_ad_html = build_goods_ad_html(category, player_name, team_name)
 
     thumbnail_url = THUMBNAIL_IMAGES.get(category, THUMBNAIL_IMAGES["OTHER"])
     source_name = get_source_name(source_url)
@@ -564,6 +726,10 @@ def build_blog_body(category, player_name, team_name, summary_lines, source_url)
         <div class="ad-section">
             <div class="ad-caption">ADVERTISEMENT</div>
             {vod_ad_html}
+        </div>
+        <div class="ad-section">
+            <div class="ad-caption">SPORTS GOODS</div>
+            {goods_ad_html}
         </div>
         <p><small style="color: #6e6e6e; display: block; margin-top: 30px; font-size: 11px;">
             ※本記事は各情報元の事実データをもとに独自の解説を加えたものです。<br>
@@ -655,66 +821,73 @@ def main():
     processed_urls = load_processed_urls()
     print(f"現在の既読URL数: {len(processed_urls)}")
 
-    all_rss_urls = get_all_rss_urls()
-    # 巡回順を毎回シャッフルする。固定順だとサッカー関連（専用RSS+クエリ数が多い）が
-    # 常に先頭に来て毎回先に投稿されてしまい、他競技のチェックまで到達できないため。
-    random.shuffle(all_rss_urls)
-    print(f"巡回対象RSS数: {len(all_rss_urls)}件（公式RSS {len(RSS_URLS)}件 + 競技別Google Newsキーワード {len(all_rss_urls) - len(RSS_URLS)}件）※巡回順はシャッフル済み")
+    urls_by_category = get_rss_urls_by_category()
+    categories = list(urls_by_category.keys())
+    # カテゴリの抽選順を毎回シャッフルする。サッカーはフィード・検索クエリ数が他競技より
+    # 圧倒的に多いため、先にカテゴリ単位で抽選することで、フィード数に関わらず
+    # 各カテゴリが均等に「その回の投稿候補」に選ばれるようにする。
+    random.shuffle(categories)
+    total_feeds = sum(len(v) for v in urls_by_category.values())
+    print(f"巡回対象カテゴリ数: {len(categories)}件、フィード総数: {total_feeds}件 ※カテゴリ抽選順・フィード巡回順ともシャッフル済み")
 
-    for rss_url in all_rss_urls:
-        print(f"RSSフィードを巡回中: {rss_url}")
-        try:
-            feed = feedparser.parse(rss_url)
-        except Exception as e:
-            print(f"RSSのパースに失敗しました ({rss_url}): {e}")
-            continue
+    for category_hint in categories:
+        feed_urls = list(urls_by_category[category_hint])
+        random.shuffle(feed_urls)
 
-        for entry in feed.entries:
-            url = entry.link
-            if url in processed_urls:
-                continue  # 重複排除（Google Newsリンクそのものでの既読チェック）
-
-            # Google Newsのリダイレクトリンクなら実際の掲載元URLに変換する
-            resolved_url = resolve_article_url(url)
-            if resolved_url != url and resolved_url in processed_urls:
-                # 別の検索クエリ経由で既に処理済みだった同一記事なので、このリンクも既読化してスキップ
-                print(f"別ルートで既に処理済みの記事と判定したためスキップします: {resolved_url}")
-                save_processed_url(url)
-                processed_urls.add(url)
+        for rss_url in feed_urls:
+            print(f"[{category_hint}] RSSフィードを巡回中: {rss_url}")
+            try:
+                feed = feedparser.parse(rss_url)
+            except Exception as e:
+                print(f"RSSのパースに失敗しました ({rss_url}): {e}")
                 continue
 
-            print(f"未着手の新規記事を発見しました: {entry.title}")
-            raw_output = check_and_summarize_with_gemini(entry.title, entry.get("summary", ""))
+            for entry in feed.entries:
+                url = entry.link
+                if url in processed_urls:
+                    continue  # 重複排除（Google Newsリンクそのものでの既読チェック）
 
-            # レートリミット予防のため、AI呼び出し1回ごとに一定間隔を空ける
-            time.sleep(API_CALL_INTERVAL_SECONDS)
+                # Google Newsのリダイレクトリンクなら実際の掲載元URLに変換する
+                resolved_url = resolve_article_url(url)
+                if resolved_url != url and resolved_url in processed_urls:
+                    # 別の検索クエリ経由で既に処理済みだった同一記事なので、このリンクも既読化してスキップ
+                    print(f"別ルートで既に処理済みの記事と判定したためスキップします: {resolved_url}")
+                    save_processed_url(url)
+                    processed_urls.add(url)
+                    continue
 
-            if not raw_output:
-                print("移籍・去就情報ではないためスキップ、またはAPIエラーです。")
-                save_processed_url(url)
-                if resolved_url != url:
-                    save_processed_url(resolved_url)
-                continue
+                print(f"未着手の新規記事を発見しました: {entry.title}")
+                raw_output = check_and_summarize_with_gemini(entry.title, entry.get("summary", ""))
 
-            category, player_name, team_name, blog_title, summary_lines = parse_ai_output(raw_output)
-            if not blog_title:
-                blog_title = entry.title
-            if not summary_lines:
-                print("要約の抽出に失敗したためスキップします。")
-                save_processed_url(url)
-                if resolved_url != url:
-                    save_processed_url(resolved_url)
-                continue
+                # レートリミット予防のため、AI呼び出し1回ごとに一定間隔を空ける
+                time.sleep(API_CALL_INTERVAL_SECONDS)
 
-            blog_body = build_blog_body(category, player_name, team_name, summary_lines, resolved_url)
+                if not raw_output:
+                    print("移籍・去就情報ではないためスキップ、またはAPIエラーです。")
+                    save_processed_url(url)
+                    if resolved_url != url:
+                        save_processed_url(resolved_url)
+                    continue
 
-            success = send_to_blog(blog_title, blog_body, category, team_name=team_name, publish=True)
-            if success:
-                save_processed_url(url)
-                if resolved_url != url:
-                    save_processed_url(resolved_url)
-                print("1件の配信処理が正常終了したため、スクリプトを終了します。")
-                sys.exit(0)
+                category, player_name, team_name, blog_title, summary_lines = parse_ai_output(raw_output)
+                if not blog_title:
+                    blog_title = entry.title
+                if not summary_lines:
+                    print("要約の抽出に失敗したためスキップします。")
+                    save_processed_url(url)
+                    if resolved_url != url:
+                        save_processed_url(resolved_url)
+                    continue
+
+                blog_body = build_blog_body(category, player_name, team_name, summary_lines, resolved_url)
+
+                success = send_to_blog(blog_title, blog_body, category, team_name=team_name, publish=True)
+                if success:
+                    save_processed_url(url)
+                    if resolved_url != url:
+                        save_processed_url(resolved_url)
+                    print("1件の配信処理が正常終了したため、スクリプトを終了します。")
+                    sys.exit(0)
 
 
 if __name__ == "__main__":
