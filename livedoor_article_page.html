@@ -127,5 +127,27 @@
     &copy; <$BlogTitle ESCAPE$>. All rights reserved.
 </footer>
 
+<script>
+(function () {
+    // Livedoorの<$ArticleDate$>は「2026年07月26日」形式でISO 8601ではないため、
+    // 表示はそのままに、構造化データ（JSON-LD）のdatePublished/dateModifiedだけを
+    // クライアント側でISO 8601形式へ補正する。
+    try {
+        var dateEl = document.querySelector(".story-date");
+        var match = dateEl && dateEl.textContent.match(/(\d{4})年(\d{2})月(\d{2})日/);
+        if (!match) return;
+        var isoDate = match[1] + "-" + match[2] + "-" + match[3] + "T00:00:00+09:00";
+        var ldScript = document.querySelector('script[type="application/ld+json"]');
+        if (!ldScript) return;
+        var data = JSON.parse(ldScript.textContent);
+        data.datePublished = isoDate;
+        data.dateModified = isoDate;
+        ldScript.textContent = JSON.stringify(data);
+    } catch (e) {
+        // 補正に失敗しても記事表示には影響させない
+    }
+})();
+</script>
+
 </body>
 </html>
