@@ -265,6 +265,11 @@ body {
     padding: 22px 0;
     text-align: center;
 }
+.site-header h1 {
+    margin: 0;
+    font-size: inherit;
+    font-weight: inherit;
+}
 .site-logo {
     font-size: 26px;
     font-weight: 900;
@@ -284,9 +289,12 @@ body {
 
 /* カテゴリ／月別アーカイブの見出しバー */
 .archive-title-bar {
+    margin-top: 0;
     margin-bottom: 25px;
     padding-bottom: 15px;
     border-bottom: 2px solid var(--line-dark);
+    font-size: inherit;
+    font-weight: inherit;
 }
 .archive-sub {
     font-size: 14px;

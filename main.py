@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import time
 import random
@@ -571,6 +572,12 @@ def build_blog_body(category, player_name, team_name, summary_lines, source_url)
         </small></p>
     </div>
     """
+
+    # Livedoorの<$ArticleDescription$>（meta description自動生成タグ）が、HTMLタグ除去後の
+    # 生テキストをそのまま使うため、上記テンプレートのインデント・改行がディスクリプション冒頭に
+    # 大量の空白として出てしまう。タグだけの行が残す空行も含めて、空白1つ区切りに圧縮して影響を無くす。
+    blog_body = " ".join(line.strip() for line in blog_body.split("\n") if line.strip())
+    blog_body = re.sub(r" {2,}", " ", blog_body)
     return blog_body
 
 

@@ -16,6 +16,34 @@
 <meta property="og:image" content="<$ArticleFirstImage$>" />
 </IfArticleFirstImage>
 <meta name="twitter:card" content="summary_large_image" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "NewsArticle",
+  "headline": "<$ArticleTitle ESCAPE$>",
+  "datePublished": "<$ArticleDate$>",
+  "dateModified": "<$ArticleDate$>",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "<$ArticlePermalink$>"
+  },
+  <IfArticleFirstImage>
+  "image": ["<$ArticleFirstImage$>"],
+  </IfArticleFirstImage>
+  "publisher": {
+    "@type": "Organization",
+    "name": "<$BlogTitle ESCAPE$>",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "<$BlogHeaderImageUrl$>"
+    }
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "<$BlogTitle ESCAPE$>"
+  }
+}
+</script>
 </head>
 <body>
 
