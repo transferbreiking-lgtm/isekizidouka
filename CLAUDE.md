@@ -1,0 +1,259 @@
+# 【CLAUDE.md】スポーツ移籍ニュース自動配信システム TransferBreaking
+
+このファイルはプロジェクトの引き継ぎ・進行記録です。次のチャットの冒頭にそのまま貼り付けて使ってください。
+**今後、作業内容が変わるたびにこのファイルを随時更新していきます。**
+
+最終更新：2026年7月27日（SEO診断・Short-term施策実装／GSC・Bing新ドメイン登録完了を反映）
+
+**⚠️ リポジトリは2026/7/22よりPublic（公開）設定です。** コード内容は誰でも閲覧可能（Secretsは非公開のまま）。
+
+---
+
+## 1. システム概要
+
+- **名称／ブランド**：TransferBreaking（トランスファーブレイキング）－世界のプロスポーツ移籍情報
+- **サイトURL**：https://transferbreaking.officialblog.jp/（2026/7/25にtransferbreiking→transferbreakingへドメイン変更）
+- **やること**：世界中のスポーツ（12競技＋OTHER）の移籍・去就ニュースをRSS巡回 → Gemini（フォールバックでOpenRouter）が「事実だけ抽出して完全オリジナル記事を執筆」→ ライブドアブログへ自動投稿
+- **自動化基盤**：GitHub Actions（2時間おき自動実行 + 手動実行ボタンあり）
+- **投稿方式**：ライブドアブログの AtomPub API（メール投稿機能は2018年廃止のため）
+- **デザイン**：黒背景×赤/オレンジのアメリカンスポーツニュース風（ESPN・Bleacher Report系）。2カラムレイアウト（本文＋右サイドバー）。
+- **運営者**：T.makoto（個人運営）
+
+## 2. リポジトリ構成（GitHub: `transferbreiking-lgtm/isekizidouka`）
+
+```
+main.py                                # 心臓部（RSS巡回・AI生成・AtomPub投稿・Google Newsリンク解決）
+.github/workflows/main.yml             # 2時間おき自動実行設定
+processed_urls.txt                     # 既読URL履歴（自動更新される）
+backfill_team_categories.py            # 過去記事へのチームタグ・バナー・サムネイル後付けスクリプト
+livedoor_blog_style.css                # デザインCSS（ライブドア「CSS」タブに設置）※2026/7/22に初めてリポジトリへ追加
+livedoor_top_page.html                 # トップページテンプレート（GSC所有権確認metaタグ埋め込み済み）※同上
+livedoor_article_page.html             # 個別記事ページテンプレート ※同上
+livedoor_category_archive.html         # カテゴリアーカイブテンプレート ※同上
+livedoor_monthly_archive.html          # 月別アーカイブテンプレート ※同上
+```
+
+**⚠️ 2026/7/22判明した重要事実**：上記5つのデザインファイル（`livedoor_*.html`／`livedoor_blog_style.css`）は、これまで**ライブドア管理画面にだけ存在し、GitHubリポジトリには一度もコミットされていなかった**。今回、フッターへの3リンク追加（4-14参照）作業と同時にリポジトリへ初登録・プッシュ済み（コミット`96336b4`）。今後はライブドア側を更新したら**必ず同じセッション内でGitHubにも反映**すること（8章の運用ルール参照）。
+
+過去の古いファイル（Gmail送信版main.py、requirements.txt、各種モックアップtxt等）は不要・廃止済み。
+
+## 3. GitHub Secrets（Settings → Secrets and variables → Actions）
+
+| Name | 用途 | 状態 |
+|---|---|---|
+| `GEMINI_API_KEY` | Gemini API | 設定済み |
+| `OPENROUTER_API_KEY` | Gemini失敗時のフォールバック | 設定済み |
+| `LIVEDOOR_BLOG_ID` | ブログID | 設定済み |
+| `LIVEDOOR_API_KEY` | AtomPub用パスワード（ログインPWとは別・投稿設定画面で確認） | 設定済み |
+
+## 4. 意思決定の記録（なぜこうなっているか）
+
+### 4-1. アフィリエイトASP構成（DAZN関連は本セッションで再修正）
+- 当初はA8.net一本化の方針だったが、**A8.netにはDAZN・U-NEXTの取り扱いがない**ことが判明し方針変更。
+- さらに調査の結果、**DAZN単独（個人向け）サブスク案件自体が2026年7月時点で全ASPともクローズドASP化**しており新規提携不可と判明。
+- 代替として、同じDAZNコンテンツを視聴できる**「DMM×DAZNホーダイ」**（DMM経由でDAZN加入）案件に切り替え。
+- ただし**A8.netの管理画面で実際に検索しても「DMM×DAZNホーダイ」案件が見当たらなかった**（本人による実機確認）ため、A8.net分のリンクは削除し、**アクセストレード単独**の構成に変更していた。
+- **→ 2026/7/22：アクセストレードでのDMM×DAZNホーダイ審査に落選（詳細は4-13）。**
+- 確定構成（2026/7/22時点）：
+  | サービス | 提携ASP | 状態 |
+  |---|---|---|
+  | DMM×DAZNホーダイ（旧DAZN） | アクセストレード | **審査落選（要再挑戦）** |
+  | U-NEXT | バリューコマース単独 | 登録・提携申請済み → サイト審査待ち |
+  | それ以外（グッズ・ABEMA等） | A8.net | 提携済み・審査不要 |
+- コード側（`main.py`の`AFFILIATE_ADS`辞書）は対応済み。A8.netに後日「DMM×DAZNホーダイ」案件が現れた場合は、該当カテゴリのリストにA8.netリンクを1行追加すれば自動でランダムローテーション（A/Bテスト）に組み込まれる設計。
+- 未提携のAmazon/楽天の直リンクは完全に削除済み。
+
+### 4-2. `AFFILIATE_ADS`辞書
+- カテゴリごとにASP案件のリストを持たせてあり、複数登録すると投稿のたびにランダムでローテーション表示され自動A/Bテストになる仕組み。1件のみの構成でも問題なく動作する。
+- 現状は`rk=XXXXXX-DMMDAZN`／`sid=XXXXXX&pid=XXXXXX-UNEXT`のようなプレースホルダーのまま。**各ASPの審査通過後、発行された素材コードのURLに差し替える作業が未完了**。
+
+### 4-3. AIモデルのエラー対応（2026年7月14日）
+| 項目 | 旧設定（エラー） | 新設定 |
+|---|---|---|
+| Gemini | `gemini-1.5-flash`（完全廃止済み） | `gemini-flash-latest`（Google公式の自動追従エイリアス。現在は`gemini-3.5-flash`を指す） |
+| OpenRouterフォールバック | `deepseek/deepseek-chat-v3-0324:free`（無料枠廃止） | `meta-llama/llama-3.3-70b-instruct:free` |
+
+**注意**：OpenRouterの無料モデルは入れ替わりが激しいので、404が出たら[openrouter.ai/models?max_price=0](https://openrouter.ai/models?max_price=0)で現行ラインナップを確認し`OPENROUTER_MODEL`を更新すること。
+
+### 4-4. カテゴリ別サムネイル画像
+- 13枚（12競技＋OTHER）のオリジナルバナーをライブドアにアップロード済み、`THUMBNAIL_IMAGES`辞書に登録済み。`<$ArticleFirstImage$>`が記事本文内の最初の画像を自動的に一覧に表示する仕組みを利用。
+- スマホでの崩れ防止のため`<img>`タグに`style="max-width:100%; width:100%; height:auto;"`をインライン指定済み。
+
+### 4-5. サイドバーのカテゴリ一覧・URL形式（✅ 対応完了）
+- ライブドア公式の「カテゴリ別アーカイブ」ブログパーツは完全カスタムHTML編集モードでは埋め込みコード非発行のため不採用。
+- 代わりにカスタムURL機能でカテゴリアーカイブURLを`category/{$CATEGORY_NAME$}`形式に変更し、`main.py`の`CATEGORY_LABELS`と一致する日本語名でサイドバーリンクをハードコード。
+- **✅ この設定は完了し、動作確認済み**（クリックで正しくカテゴリ一覧が表示される）。
+- なお、まだ1件も記事が投稿されていないカテゴリ（クリケット等、報道自体が少ない競技）はページ自体が存在せず404になるが、これは正常な挙動（記事が投稿され次第自動的にページが生成される）。個別記事ページ・月別アーカイブは`<$ArticlePermalink$>`等の公式タグで動的にリンクされるため、URL形式変更の影響を受けない（対応不要だった）。
+
+### 4-6. パンくずリスト
+- 記事ページ・カテゴリアーカイブ・月別アーカイブに実装済み。トップページは不要のため未実装。
+
+### 4-7. スマホ版について（✅ 対応完了）
+- ライブドアの仕様上、PC版と同じHTML/CSSの自由編集はスマホ版では一切できない（無料・有料プラン問わず、スマホ版はGUIでの色・背景設定のみ）。
+- スマホ管理画面のデザイン設定＞レイアウトから「カテゴリメニュー」ブログアイテムを追加済み。**✅ 実際にスクリーンショットで確認し、ダークテーマ×赤アクセントの配色でカテゴリ一覧（サッカー(12)、ボクシング(2)、バスケットボール(1)等）が正しく表示されていることを確認済み**。
+
+### 4-8. カテゴリ運用ルール（✅ タグ実装完了・2026/7/26確認）
+- ライブドアの2階層カテゴリ（競技→リーグ）を大分類に使用。チーム名・クラブ名は専用タグ機能ではなく、AtomPubの「2つ目の`<category>`」として送信することでタグの代替とする方式（1記事につきカテゴリ2つまでの制限を利用）。
+- **✅ 実装済み**：`main.py`の`parse_ai_output()`でAI出力からteam_nameを抽出し、`send_to_blog()`が`team_name`引数を受け取って2つ目の`<category>`として送信している（[main.py:604-608](main.py:604)）。これにより`category/{チーム名}`のチーム別アーカイブページが自動生成される。
+- 過去記事へのチームタグ後付けは`backfill_team_categories.py`が担当。同スクリプトが`main.py`から存在しない`call_mistral_fallback`/`MISTRAL_API_KEY`をimportしてImportErrorで起動不能になっていたバグを2026/7/26に修正済み（Mistral関連の記述を削除し、main.py実態と同じGemini→OpenRouterの2段フォールバックに統一）。
+
+### 4-9. GitHub Actions運用の注意点
+- 403 push エラーは`main.yml`に`permissions: contents: write`を追加し、リポジトリのWorkflow permissionsを「Read and write」に変更して解消済み。実リポジトリ側の`.github/workflows/main.yml`にも反映済みであることを2026/7/22に確認済み。
+
+### 4-10. 出典表示の調整（✅ 対応済み）
+- 記事下部の出典表示が目立ちすぎていたため、文字サイズを`12px`→`11px`、文字色を`#999999`→`#6e6e6e`、リンク色を`#b7b7b7`→`#8a8a8a`に変更（`main.py`のインラインスタイルと`livedoor_blog_style.css`の両方を修正）。CSSは即時反映、`main.py`側は次回投稿分から適用。
+
+### 4-11. Google Newsリンクの実URL解決（✅ 実装済み・要検証）
+- Google Newsキーワード検索RSS経由の記事は、リンクが`news.google.com`のリダイレクトURLになっており、出典表示が「Google News」という曖昧な表記になってしまう問題があった。
+- `googlenewsdecoder`ライブラリ（`new_decoderv1`関数）を導入し、`resolve_article_url()`関数でGoogle Newsリンクを実際の掲載元URL（BBC、ESPNなど）にデコードするよう対応。
+- デコード失敗時は元のGoogle News URLにフォールバックするため処理は止まらない設計。
+- 副次効果：実URLに変換してから重複判定するようになったため、同じ記事が複数の検索クエリ経由でヒットした場合の二重投稿防止にも寄与する。
+- **⚠️ 未検証**：Google News経由の記事が投稿された際に、出典表示が正しいメディア名で表示されるか、デコード処理でエラーが多発しないか等は次回以降の投稿時に確認が必要。
+
+### 4-12. 検索エンジンインデックス対応（✅ 完了）
+- Google Search Console：サイト登録・所有権確認（HTMLメタタグ方式、`livedoor_top_page.html`の`<head>`に埋め込み済み）・サイトマップ（`index.rdf`）送信・URL検査でのインデックス登録リクエスト、すべて完了。
+- Bing Webmaster Tools：GSCからのインポートで登録・サイトマップ送信・URL検査でのインデックス登録リクエスト、すべて完了。
+
+### 4-13. DMM×DAZNホーダイ（アクセストレード）審査落選 → 代替ルート検討中（2026/7/22）
+- アクセストレード経由の「DMM×DAZNホーダイ」提携申請が**審査落選**。
+- 落選理由は非公開だが、**AI自動生成記事のみで構成され、運営者情報・プライバシーポリシー等のサイト基本ページが無かったことが主因と推定**（対策として4-14を実施）。
+- 代替ルートとして以下の2つを検討中（未着手）：
+  1. もしもアフィリエイト経由で同一案件（DMM×DAZNホーダイ）に再挑戦
+  2. DMM本体アフィリエイトへ直接登録（X連携必須、報酬1件5,500円）
+- アクセストレードへの即再申請は不利になりやすいため、4-14の対応完了後、1ヶ月程度空けてから再挑戦する方針。
+
+### 4-14. 運営者情報・プライバシーポリシー・お問い合わせページの新規設置（✅ 完了・2026/7/22）
+- 4-13の審査落ち対策として、サイトの信頼性を高めるため3ページを新規設置。
+- ライブドアには固定ページ機能が無いため、**投稿日を過去日付にした通常記事として投稿**（トップページの新着一覧を汚さないようにするため）。
+- **運営者**：T.makoto
+- **お問い合わせ**：Googleフォーム（`https://forms.gle/TXydQfyM3hBudieJ6`）経由で受付。
+- 公開URL：
+  - 運営者情報：`https://transferbreaking.officialblog.jp/archives/14106847.html`
+  - プライバシーポリシー：`https://transferbreaking.officialblog.jp/archives/14106850.html`
+  - お問い合わせ：`https://transferbreaking.officialblog.jp/archives/14106866.html`
+- **メニューバーへの導線は「ライブドア公式のメニューバー設定」では反映されなかった**（4-5と同じ理由＝フルカスタムHTML編集モードでは公式ブログパーツの埋め込みタグが発行されないため）。
+- → 対応として、4テンプレート（トップ・個別記事・カテゴリアーカイブ・月別アーカイブ）の`<footer class="site-footer">`内に3リンクを直接HTMLでハードコードする方式に変更。`livedoor_blog_style.css`に`.footer-links`のスタイルを追加。
+- 全ファイル、ライブドア管理画面への貼り付け・GitHubリポジトリへのプッシュともに完了（コミット`96336b4`）。
+
+### 4-15. GitHubリポジトリへのpush運用について（2026/7/22）
+- Fine-grainedトークンで一度失敗（「アクセスできるリポジトリが0件」エラー）→原因切り分けに時間がかかった。**Classicトークン（scopeは`repo`のみ）に切り替えたら即成功**。
+- 今後の詳細な運用ルールは8章参照。
+
+## 5. ライブドアブログ側の設定（デザイン設定 → デザイン／ブログパーツ設定 → PC → カスタマイズ）
+
+| タブ | ファイル |
+|---|---|
+| CSS | `livedoor_blog_style.css` |
+| トップページ | `livedoor_top_page.html`（GSC所有権確認metaタグ埋め込み済み・フッターリンク追加済み） |
+| 個別記事ページ | `livedoor_article_page.html`（フッターリンク追加済み） |
+| カテゴリアーカイブ | `livedoor_category_archive.html`（フッターリンク追加済み） |
+| 月別アーカイブ | `livedoor_monthly_archive.html`（フッターリンク追加済み） |
+
+使用している正式タグ（確認済み）：
+`<IndexArticlesLoop>` `<CategorizedArticlesLoop>` `<MonthlyArticlesLoop>` `<$ArticleTitle ESCAPE$>` `<$ArticlePermalink$>` `<$ArticleDate$>` `<$ArticleBody$>` `<$BlogTitle ESCAPE$>` `<$BlogUrl$>` `<$CSSUrl$>` `<$RSSUrl$>` `<$CategoryName ESCAPE$>` `<$MonthLabel ESCAPE$>` `<$HeadSectionCommon$>` `<$BlogHeaderImageUrl/Width/Height$>` `<IfBlogHeaderImageUrl>` `<$ArticleToolBox$>` `<$RelatedArticles$>` `<$Advertise$>`（無料プラン規約上、削除・非表示化は禁止）`<$ArticleFirstImage$>` `<IfArticleFirstImage>`（サムネイル自動表示）
+
+**固定ページ非対応の回避策（4-14）**：運営者情報等は通常記事として投稿し、投稿日を過去日付に設定。サイト内リンクはメニューバー公式パーツではなく、4テンプレート共通の`<footer>`内に直接HTMLでハードコード（`.footer-links`）。
+
+## 6. 未完了・次にやること（優先順）
+
+1. **【要検証】Google Newsリンクの実URL解決機能の動作確認**（4-11参照）
+2. **本番投稿の継続監視**：投稿頻度、カテゴリの偏り、記事品質などを定点観測
+3. （優先度低）バリューコマース（U-NEXT）の審査結果確認。通過していれば該当カテゴリにリンクを追加登録してもよい（ABEMAとのA/Bテスト構成にできる）
+4. （優先度低）DAZN系ASPの再挑戦：4-14で運営者情報等ページを設置済みなので、時間を空けて再申請する余地はあるが、4-16の通り現状はABEMA運用で確定・急ぎではない
+5. ~~サイトURLドメイン変更（4-18）の残タスク~~ → 2026/7/27完了（4-18参照）
+6. **【要検証】SEO Short-term施策（4-19参照）の本番効果確認**：meta description空白バグの実際の解消具合、NewsArticle構造化データのGoogle認識状況をSearch Consoleで確認
+7. （優先度中）4-19で洗い出したLong-term施策（噂→公式発表への記事アップデート機構、SUMMARYプロンプトのさらなる拡充）の着手判断
+
+## 7. 運用上の注意点（過去のトラブルから）
+
+- GitHubでファイルを新規作成する際、**必ずリポジトリのルート階層にいる状態**で「+」→「Create new file」を押すこと
+- `main.yml`や`main.py`を編集する際は、コードブロックの```記号やチャットの説明文を誤ってコピーしないよう、中身だけを正確にコピーすること
+- ライブドアは無料プランのため`<$Advertise$>`タグの削除・非表示化は規約違反になる
+- RSS_URLSは実在確認済みのものだけを使うこと
+- **AIモデル名は定期的に廃止される**。Gemini・OpenRouterどちらも404エラーが出たら、まずモデル名が廃止されていないかを最初に疑うこと
+- **ライブドアの「ブログパーツ」「メニューバー設定」は完全カスタムHTML編集モードとは相性が悪い**。サイドバーやフッターに何か追加したい場合は、公式パーツ設定に頼らず、テンプレートHTMLに直接ハードコードする方式を最初から選ぶこと
+- **スマホ版はHTML/CSSの直接編集が一切できない**仕様。スマホ対応が必要な場合はスマホ管理画面のGUI機能で対応する
+- **ASP（アフィリエイト提携）は複数併用が前提かつ実機確認が必須**：ASP集約サイトの情報が古い/不正確な場合があるため、実際に管理画面で検索して案件の有無を確認すること
+- **カテゴリページの404は必ずしもバグではない**：該当カテゴリに投稿済み記事が0件の場合、ライブドアはページ自体を生成せず404を返す。これは正常な挙動であり、記事が投稿されれば自動解消する
+- **スクリーンショット確認時は「実機か縮小ブラウザか」を必ず確認する**：画面の見え方の解釈を誤ると誤った指摘をしてしまうため
+
+### 4-16. アフィリエイトASP探索を打ち切り、ABEMA(A8.net)に全カテゴリ統一（2026/7/22）
+- DMM×DAZNホーダイは全ルート（アクセストレード落選／A8.net取扱無／もしも取扱無／バリューコマース見当たらず／afb未登録で保留／DMM本体登録難航／Felmatは対象外）で行き詰まったため探索を打ち切り。
+- `AFFILIATE_ADS`の全12カテゴリ＋OTHERを、既にA8.netで提携済み・審査不要のABEMA実リンク1本（`https://px.a8.net/svt/ejp?a8mat=4B878W+CTF8MY+4EKC+60WN6`）に統一。カテゴリごとに表示文言のみ変更。
+- GitHubへコミット・プッシュ済み（コミット`a7a037f`）。
+- 今後、他ASPでDAZN/U-NEXT等が承認された場合は、該当カテゴリのリストにリンクを追加すれば自動でローテーションに組み込まれる（リスト構造自体は維持）。
+
+### 4-18. サイトURLのドメイン変更（transferbreiking → transferbreaking）（2026/7/25）
+- `https://transferbreiking.officialblog.jp/` → `https://transferbreaking.officialblog.jp/` にドメインを変更（誤字修正と思われる）。
+- ローカルリポジトリ内の該当箇所を修正・GitHubへのプッシュ待ち：
+  - `main.py`の`BLOG_BASE_URL`デフォルト値
+  - `livedoor_top_page.html`／`livedoor_article_page.html`／`livedoor_category_archive.html`／`livedoor_monthly_archive.html`のフッター内リンク3本（運営者情報・プライバシーポリシー・お問い合わせ）
+- **注意**：GitHubの`transferbreiking-lgtm`はGitHubアカウント名であり、ブログのドメイン名とは無関係のため変更不要（今回はブログURLのみの変更）。
+- **✅ 2026/7/26確認**：ライブドア管理画面側のブログURL設定自体の変更は本人作業により完了済み。新ドメイン（`https://transferbreaking.officialblog.jp/`）でサイトが正常に表示されることをブラウザで確認済み（トップページ・記事リンク・カテゴリリンクとも新ドメインで生成されている）。
+- **✅ 2026/7/26対応**：Google Search Console／Bing Webmaster Toolsの新ドメイン向け所有権確認用metaタグ（`google-site-verification`／`msvalidate.01`）を`livedoor_top_page.html`の`<head>`に追加。
+- **✅ 2026/7/26ブラウザ実機確認**：
+  1. **metaタグのライブドア反映**：完了。実サイトのトップページ`<head>`に`google-site-verification`／`msvalidate.01`とも実際に出力されていることをブラウザで確認済み。
+  2. **旧ドメイン（transferbreiking.officialblog.jp）からのリダイレクト**：対応済み。旧ドメインへアクセスすると自動的に新ドメイン（transferbreaking.officialblog.jp）へリダイレクトされることを確認済み（外部被リンク・ブックマークの404懸念は解消）。
+  3. **出典表示・Google Newsデコード機能**：正常動作確認。記事下部の出典表示が「情報元: Sanyonews」のように具体的なメディア名で表示されており、4-11の懸念（デコード失敗・表示崩れ）は発生していない。
+  4. **フッター3リンク（運営者情報／プライバシーポリシー／お問い合わせ）**：新ドメインのURLで正しく設置されていることを確認済み。
+- **✅ 2026/7/26修正・確認**：運営者情報（archives/14106847.html）・プライバシーポリシー（archives/14106850.html）の**本文中**【サイトURL】欄に旧ドメイン（`transferbreiking`誤字入り）が残っていたバグを発見。本人がライブドア管理画面で両記事本文を新ドメインに修正し、ブラウザ実機で反映済みであることを確認済み。
+- **✅ 2026/7/27完了**：GSC／Bingでの新ドメイン（transferbreaking.officialblog.jp）のプロパティ登録・所有権確認・サイトマップ再送信、本人作業により完了。4-18の残タスクはこれで解消。
+- **⚠️ 引き続き未対応・要確認事項（次にやること）**：
+  1. **GitHub Secretsに`BLOG_BASE_URL`が別途登録されている場合はそちらも更新**（`main.py`のデフォルト値だけでなくSecrets/環境変数を優先している可能性があるため要確認）
+  2. **processed_urls.txt内の既読URL**は旧ドメインの記事URLで蓄積されている可能性があるため、重複投稿判定への影響がないか要確認
+- GitHubへのコミット・プッシュはこのセッション内で完了予定（8-1ルール準拠）。
+
+### 4-17. GitHub Actions課金エラーによる投稿停止 → リポジトリPublic化で解消（2026/7/22）
+- 「recent account payments have failed or your spending limit needs to be increased」エラーでGitHub Actionsが起動しなくなり、新規投稿が停止した。
+- リポジトリが**Private**設定だったため、無料枠（月2,000分）超過後に有料化が必要な状態でカード決済が通らずブロックされていたことが原因。
+- リポジトリをGitHub管理画面の「Danger Zone」からPublicに変更（メール確認コードでの本人確認あり）して解消。Public化によりGitHub Actionsの実行時間が無制限無料になる。
+- Public化後、Actionsタブから手動実行（Run workflow）して復旧確認済み。新規投稿が再開したことを確認済み。
+- **注意**：コード（`main.py`等）は誰でも閲覧可能になった。GitHub Secrets（`GEMINI_API_KEY`等）は引き続き非公開。
+
+### 4-19. Geminiプロンプトの3ステップ化・SEO診断・Short-term施策の実装（2026/7/26〜27）
+- **Geminiプロンプトの書き換え**（コミット`deadaac`）：`global-source-journalism`スキルの方針に沿い、`main.py`の`build_prompt()`（[main.py:353-397](main.py:397)）を「翻訳ベース」から「事実精査（Step1）→独自解釈の構築（Step2）→執筆（Step3）」の3ステップ方式に書き換え。タイトルも独自の切り口を反映するよう指示。翻訳や直接引用（15語超・複数箇所）を明示的に禁止。出力フォーマット（CATEGORY/PLAYER_NAME/TEAM_NAME/TITLE/SUMMARY）は変更なしのため`parse_ai_output()`は無修正。
+- **full-stack-builderスキルの導入**：ローカルに存在しなかったため、マコトさんが別途`.claude/skills/full-stack-builder.skill`として持ち込み、`.claude/skills/full-stack-builder/SKILL.md`に展開・登録済み。以後の実装フェーズはこのスキル経由で進める。
+- **`seo-revenue-audit`スキルによる実サイト診断**（2026/7/26、ブラウザで実機確認）：主な指摘事項
+  - トップページ・カテゴリアーカイブページにH1タグが存在しない（技術SEO上の重大な欠陥）
+  - `<$ArticleDescription$>`（meta description自動生成）が`main.py`の`build_blog_body()`のHTMLインデントをそのまま拾い、検索結果スニペット冒頭に大量の空白が入る
+  - 構造化データ（NewsArticle等のJSON-LD）が全ページで皆無
+  - 記事本文が3行の箇条書きのみで薄い（Long-term課題として保留）
+- **Short-term施策の実装**（コミット`3f490ef`・`62f114c`）：
+  1. `livedoor_top_page.html`・`livedoor_category_archive.html`にH1追加（トップはロゴ画像、カテゴリアーカイブは`<$CategoryName$>`をH1化）。`livedoor_blog_style.css`にh1のデフォルト余白リセットを追加。
+  2. `main.py`の`build_blog_body()`（[main.py:530-580](main.py:580)）が返すHTML文字列のインデント・改行を圧縮し、meta description冒頭の空白バグを軽減（Livedoor側の抽出アルゴリズムが非公開のため完全解消は次回投稿時の実機確認待ち）。
+  3. `livedoor_article_page.html`の`<head>`にNewsArticleのJSON-LD構造化データを追加。`datePublished`/`dateModified`は`<$ArticleDate$>`が「2026年07月26日」形式でISO 8601ではないため、ページ末尾に小さなJavaScriptを追加し、表示はそのままに構造化データ側だけをクライアント側でISO 8601（`YYYY-MM-DDT00:00:00+09:00`）へ補正する方式を採用。
+- **✅ 2026/7/26ライブドア管理画面への反映・2026/7/27ブラウザ実機確認**：H1（トップ・カテゴリアーカイブとも）、JSON-LD（パースエラーなし）、日付補正JSとも本番で正常動作を確認済み。
+- **注意**：ローカル作業フォルダは長らく`.git`未初期化だった（このセッションで`git init`し、`git reset <ref>`で作業中の未コミットファイルを保持したままリモート履歴に接続）。`processed_urls.txt`・`.github/workflows/main.yml`・`README.md`はローカルに存在しない/古いだけの状態が続いているため、コミット時は誤って削除・巻き戻ししないよう都度`git status`で個別ファイルを確認してからstageすること。
+
+## 8. 運用効率化ルール（2026/7/22追加・「やり直しが多い」への対策）
+
+今回、ライブドア側だけ更新してGitHub側が長期間放置されていたこと、およびGitHubトークン発行でfine-grained→classicと2往復したことが、やり直し作業の主因だった。再発防止のため以下をルール化する。
+
+### 8-1. デザインファイルは「2点セット」で必ず同時に完了させる
+ライブドアの管理画面にHTML/CSSを貼り付けたら、**同じセッション内で必ずGitHubにもコミット・プッシュする**。どちらか片方だけで終わらせない。今回、livedoor_*ファイルが1年近くGitHubに一度も上がっていなかったことが判明したのはこのルール不徹底が原因。
+
+### 8-2. GitHubトークンは最初から「Classic・repoスコープのみ」で発行する
+Fine-grainedトークンはリポジトリ選択・組織承認まわりで詰まりやすいことが今回判明した。**次回以降は最初からこの手順を案内する**：
+1. https://github.com/settings/tokens を開く（`?type=beta`は付けない＝Classic版）
+2. 「Generate new token (classic)」
+3. Expirationは`7 days`
+4. スコープは**「repo」の大チェック1つだけ**
+5. 生成されたトークンをそのまま貼ってもらう
+
+これで今回発生した「0件エラー」「アカウント確認」「type=beta再発行」の3往復が発生しなくなる。
+
+### 8-3. トークンは毎回使い捨て・作業後は必ず削除
+セキュリティ上、長期保存はしない方針を継続する。7日の有効期限に加え、作業完了後は`https://github.com/settings/tokens`から手動削除を都度案内する。
+
+### 8-4. セッション終盤に「今回の変更ファイル一覧」をCLAUDE.mdへ即時反映する
+今回のように「記録して」と言われてから慌てて全部書き出すのではなく、**大きな変更（テンプレート修正・ASP変更・審査結果など）が発生した時点で都度4章に追記していく**運用に切り替える。
+
+---
+
+このドキュメントと合わせて、これまでの会話ログを参照できる状態で次のチャットを始めれば、スムーズに続きから着手できます。
+
+---
+
+## 9. 応答ルール
+
+- **返信の冒頭には必ず「📁 TransferBreaking」と明記すること。**
