@@ -83,6 +83,11 @@
 
         <div class="article-tools">
             <$ArticleToolBox$>
+            <div class="sns-share">
+                <span class="sns-share-label">SHARE</span>
+                <a id="sns-share-x" href="#" target="_blank" rel="nofollow noopener" class="sns-share-btn sns-share-x">Xでシェア</a>
+                <a id="sns-share-line" href="#" target="_blank" rel="nofollow noopener" class="sns-share-btn sns-share-line">LINEで送る</a>
+            </div>
         </div>
 
         <div class="related-articles">
@@ -145,6 +150,28 @@
         ldScript.textContent = JSON.stringify(data);
     } catch (e) {
         // 補正に失敗しても記事表示には影響させない
+    }
+})();
+
+(function () {
+    // SNSシェアボタンのリンク先を組み立てる。ライブドアのタグはURLエンコードに対応していないため、
+    // <$ArticlePermalink$>等をテンプレートへ直接埋め込まず、表示中ページのURL/タイトルを
+    // JS側でencodeURIComponentしてから各シェアURLに反映する。
+    try {
+        var pageUrl = encodeURIComponent(location.href);
+        var titleEl = document.querySelector(".article-title-main");
+        var pageTitle = encodeURIComponent(titleEl ? titleEl.textContent.trim() : document.title);
+
+        var xBtn = document.getElementById("sns-share-x");
+        if (xBtn) {
+            xBtn.href = "https://twitter.com/intent/tweet?url=" + pageUrl + "&text=" + pageTitle;
+        }
+        var lineBtn = document.getElementById("sns-share-line");
+        if (lineBtn) {
+            lineBtn.href = "https://social-plugins.line.me/lineit/share?url=" + pageUrl + "&text=" + pageTitle;
+        }
+    } catch (e) {
+        // 失敗してもシェアボタンが機能しないだけで記事表示には影響させない
     }
 })();
 </script>

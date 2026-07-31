@@ -441,6 +441,43 @@ body {
     border-top: 1px solid var(--line-dark);
 }
 
+/* X/LINEシェアボタン（JSでシェアURLを組み立てる。livedoor_article_page.html参照） */
+.sns-share {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+}
+.sns-share-label {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    color: var(--text-sub);
+    text-transform: uppercase;
+}
+.sns-share-btn {
+    display: inline-block;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffffff;
+    text-decoration: none;
+    border-radius: 3px;
+}
+.sns-share-x {
+    background-color: #000000;
+    border: 1px solid var(--line-dark);
+}
+.sns-share-x:hover {
+    background-color: #262626;
+}
+.sns-share-line {
+    background-color: #06c755;
+}
+.sns-share-line:hover {
+    background-color: #05a848;
+}
+
 /* 関連記事（<$RelatedArticles$>の枠） */
 .related-articles {
     max-width: 720px;
