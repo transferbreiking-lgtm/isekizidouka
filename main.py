@@ -238,6 +238,12 @@ API_CALL_INTERVAL_SECONDS = 4
 # Google Newsリンクのデコード処理の内部待機秒数（googlenewsdecoderライブラリの引数）
 GNEWS_DECODE_INTERVAL_SECONDS = 1
 
+# Google Newsリンクのデコード失敗時の最大リトライ回数。
+# デコードが1回失敗しただけで元のGoogle News URLにフォールバックすると、同じ記事が
+# 別の検索クエリ経由で正常デコードされた過去の記事URLと一致せず、重複投稿の原因になる
+# （クリケットのように検索クエリ数が少ないカテゴリで顕在化した：2026/8/1）。
+GNEWS_DECODE_MAX_RETRIES = 2
+
 # カテゴリ別サムネイル画像（ライブドアの「画像/ファイル」にアップロード済みのオリジナルバナー）
 # トップページ/アーカイブページの <$ArticleFirstImage$> はこの画像を自動的に拾って一覧に表示する。
 # ※ 2026年7月版バナーに差し替え済み（フルサイズURL。-s付きはサムネイル版なのでここでは使わない）。
@@ -467,15 +473,34 @@ def resolve_article_url(url):
     if "news.google.com" not in domain:
         return url  # Google News以外のURLはそのまま返す（公式RSS等）
 
-    try:
-        result = new_decoderv1(url, interval=GNEWS_DECODE_INTERVAL_SECONDS)
-        if result.get("status") and result.get("decoded_url"):
-            return result["decoded_url"]
-        print(f"Google Newsリンクのデコードに失敗しました（status=False）。元のURLを使用します: {url}")
-    except Exception as e:
-        print(f"Google Newsリンクのデコード中にエラーが発生しました。元のURLを使用します: {e}")
+    for attempt in range(1, GNEWS_DECODE_MAX_RETRIES + 1):
+        try:
+            result = new_decoderv1(url, interval=GNEWS_DECODE_INTERVAL_SECONDS)
+            if result.get("status") and result.get("decoded_url"):
+                return result["decoded_url"]
+            print(f"Google Newsリンクのデコードに失敗しました（{attempt}回目/最大{GNEWS_DECODE_MAX_RETRIES}回・status=False）。")
+        except Exception as e:
+            print(f"Google Newsリンクのデコード中にエラーが発生しました（{attempt}回目/最大{GNEWS_DECODE_MAX_RETRIES}回）: {e}")
+        if attempt < GNEWS_DECODE_MAX_RETRIES:
+            time.sleep(GNEWS_DECODE_INTERVAL_SECONDS)
 
+    print(f"Google Newsリンクのデコードに最終的に失敗したため、元のURLを使用します: {url}")
     return url  # デコード失敗時は元のURL（news.google.com）にフォールバック
+
+
+def normalize_resolved_url(url):
+    """記事の実URLを重複判定用に正規化する（ドメインの大文字小文字・www有無・末尾スラッシュ・
+    クエリ文字列/フラグメントの差異を吸収する）。同じ記事が別の検索クエリ経由で拾われた際、
+    トラッキングパラメータの有無だけで別記事と誤判定されるのを防ぐために使う。"""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        netloc = parsed.netloc.lower()
+        if netloc.startswith("www."):
+            netloc = netloc[4:]
+        path = parsed.path.rstrip("/")
+        return f"{netloc}{path}"
+    except Exception:
+        return url
 
 
 def load_processed_urls():
@@ -819,6 +844,9 @@ def send_to_blog(subject, body_html, category, team_name=None, publish=True):
 # -----------------------------------------------------------------------------
 def main():
     processed_urls = load_processed_urls()
+    # 正規化済みURLの集合。生のURL文字列同士の完全一致だけでなく、Google Newsのデコード先
+    # （実際の記事URL）をトラッキングパラメータの差異を無視して比較するために使う。
+    processed_normalized = {normalize_resolved_url(u) for u in processed_urls}
     print(f"現在の既読URL数: {len(processed_urls)}")
 
     urls_by_category = get_rss_urls_by_category()
@@ -849,11 +877,15 @@ def main():
 
                 # Google Newsのリダイレクトリンクなら実際の掲載元URLに変換する
                 resolved_url = resolve_article_url(url)
-                if resolved_url != url and resolved_url in processed_urls:
+                norm_resolved = normalize_resolved_url(resolved_url)
+                if resolved_url in processed_urls or norm_resolved in processed_normalized:
                     # 別の検索クエリ経由で既に処理済みだった同一記事なので、このリンクも既読化してスキップ
+                    # （正規化比較により、片方の検索クエリでデコードが失敗していても、もう片方で
+                    # 正常デコード済みの実URLと照合できるようにしている）
                     print(f"別ルートで既に処理済みの記事と判定したためスキップします: {resolved_url}")
                     save_processed_url(url)
                     processed_urls.add(url)
+                    processed_normalized.add(normalize_resolved_url(url))
                     continue
 
                 print(f"未着手の新規記事を発見しました: {entry.title}")
@@ -865,8 +897,12 @@ def main():
                 if not raw_output:
                     print("移籍・去就情報ではないためスキップ、またはAPIエラーです。")
                     save_processed_url(url)
+                    processed_urls.add(url)
+                    processed_normalized.add(normalize_resolved_url(url))
                     if resolved_url != url:
                         save_processed_url(resolved_url)
+                        processed_urls.add(resolved_url)
+                        processed_normalized.add(norm_resolved)
                     continue
 
                 category, player_name, team_name, blog_title, summary_lines = parse_ai_output(raw_output)
@@ -875,8 +911,12 @@ def main():
                 if not summary_lines:
                     print("要約の抽出に失敗したためスキップします。")
                     save_processed_url(url)
+                    processed_urls.add(url)
+                    processed_normalized.add(normalize_resolved_url(url))
                     if resolved_url != url:
                         save_processed_url(resolved_url)
+                        processed_urls.add(resolved_url)
+                        processed_normalized.add(norm_resolved)
                     continue
 
                 blog_body = build_blog_body(category, player_name, team_name, summary_lines, resolved_url)
