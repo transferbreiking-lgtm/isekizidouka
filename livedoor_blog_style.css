@@ -36,6 +36,8 @@
 
 html {
     background-color: var(--page-bg);
+    overflow-x: hidden;  /* ライブドア無料プラン強制表示の上部ツールバー(table.blog-common-header)が
+                             スマホ幅より広く、削除不可のため横スクロールだけを見た目上抑える */
 }
 
 body {
@@ -43,6 +45,7 @@ body {
     color: var(--text-main);
     line-height: 1.7;
     margin: 0;
+    overflow-x: hidden;
     background-color: var(--page-bg);
     background-image:
         radial-gradient(ellipse 700px 500px at 8% 92%, rgba(40, 110, 200, 0.28), transparent 60%),
@@ -59,7 +62,6 @@ body {
    ============================================================================ */
 
 .article-outer {
-    max-width: 720px;
     margin: 20px auto;
     padding: 0 20px;
     font-family: "Helvetica Neue", Arial, "Hiragino Sans", "Noto Sans JP", sans-serif;
@@ -190,34 +192,6 @@ body {
     font-weight: 800;
     border-radius: 2px;
 }
-
-/* 選手個人グッズ広告エリア */
-.personal-ad-box {
-    margin: 30px 0;
-    padding: 20px;
-    border: 1px solid var(--line-dark);
-    background-color: var(--card-bg);
-    text-align: center;
-}
-.personal-ad-box p {
-    margin: 0 0 12px 0;
-    font-size: 13px;
-    font-weight: 800;
-    letter-spacing: 0.05em;
-    color: var(--text-main);
-    text-transform: uppercase;
-}
-.personal-ad-box a {
-    display: inline-block;
-    margin: 0 10px;
-    font-size: 14px;
-    font-weight: 700;
-    text-decoration: none;
-    border-bottom: 2px solid currentColor;
-    padding-bottom: 1px;
-}
-.ad-rakuten { color: #ff5c5c; }
-.ad-amazon { color: #ffb84d; }
 
 /* 配信プラットフォーム（VOD）広告エリア：ひときわ濃いパネルで目立たせる */
 .ad-section {
@@ -385,12 +359,6 @@ body {
 .story-title a:hover {
     color: var(--accent-orange);
 }
-.story-snippet {
-    margin: 8px 0 0;
-    color: var(--text-sub);
-    font-size: 14px;
-    line-height: 1.6;
-}
 
 /* 個別記事ページの記事タイトル（トップに出る大見出し） */
 .article-title-main {
@@ -435,7 +403,6 @@ body {
 
 /* SNSシェアボタン（<$ArticleToolBox$>の枠） */
 .article-tools {
-    max-width: 720px;
     margin: 30px auto 0;
     padding: 20px 20px 0;
     border-top: 1px solid var(--line-dark);
@@ -480,7 +447,6 @@ body {
 
 /* 関連記事（<$RelatedArticles$>の枠） */
 .related-articles {
-    max-width: 720px;
     margin: 30px auto 0;
     padding: 0 20px;
 }

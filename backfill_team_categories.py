@@ -63,6 +63,7 @@ from main import (
     build_team_archive_url,
     call_gemini_with_retry,
     call_openrouter_fallback,
+    compact_html_for_description,
 )
 
 # ラベル（日本語カテゴリ名）→ 内部カテゴリコードの逆引き辞書（例: "サッカー" → "SOCCER"）
@@ -133,21 +134,25 @@ def sync_thumbnail(body_html, category_code):
     if marker not in body_html:
         return body_html, False  # 想定外の構造なので変更しない
 
+    # main.py側は本文全体を1行に圧縮して投稿する仕様（2026/7/26〜）のため、ここで改行・インデント付きの
+    # タグを差し込むと圧縮済み本文に改行が混入してしまう。挿入するタグ自体も改行無しで組み立てる。
     img_tag = (
-        f'\n        <img src="{expected_url}" alt="{category_code}" class="article-thumbnail" '
+        f'<img src="{expected_url}" alt="{category_code}" class="article-thumbnail" '
         f'style="max-width:100%; width:100%; height:auto; display:block; border:1px solid #333;" />'
     )
     return body_html.replace(marker, marker + img_tag, 1), True
 
 
 def build_category_banner_html(category_label, category_archive_url):
-    """main.py の build_blog_body() と同一のHTML構造でバナーブロックを組み立てる"""
+    """main.py の build_blog_body() が投稿する1行圧縮済みHTMLと同一の書式でバナーブロックを組み立てる。
+    本文全体が1行に圧縮されている仕様（main.py側のcompact_html_for_description、2026/7/26〜）のため、
+    ここで改行・インデント付きのHTMLを返すと、このバナー部分だけ圧縮が崩れて本文に混入してしまう
+    （meta description冒頭の空白バグが2026/8/3に再発する原因になっていた）。"""
     return (
-        '\n        <div class="related-team-section" '
-        'style="margin-top:16px; padding:10px 14px; background:#1a1a1c; border-left:3px solid #e4002b;">\n'
-        f'            <a href="{category_archive_url}" style="color:#e4002b; text-decoration:none; '
-        f'font-weight:bold;">📌 {category_label}の記事一覧はこちら »</a>\n'
-        '        </div>'
+        '<div class="related-team-section" '
+        'style="margin-top:16px; padding:10px 14px; background:#1a1a1c; border-left:3px solid #e4002b;"> '
+        f'<a href="{category_archive_url}" style="color:#e4002b; text-decoration:none; '
+        f'font-weight:bold;">📌 {category_label}の記事一覧はこちら »</a></div>'
     )
 
 
@@ -157,7 +162,7 @@ def sync_category_banner(body_html, category_label, category_archive_url):
     変更が無ければ (body_html, False) を返す。"""
     expected_html = build_category_banner_html(category_label, category_archive_url)
 
-    if expected_html.strip() in body_html:
+    if expected_html in body_html:
         return body_html, False  # 既に最新の状態
 
     if _RELATED_BANNER_RE.search(body_html):
@@ -168,7 +173,7 @@ def sync_category_banner(body_html, category_label, category_archive_url):
     if marker not in body_html:
         return body_html, False  # 想定外の構造なので変更しない
 
-    updated = body_html.replace(marker, expected_html + "\n        " + marker, 1)
+    updated = body_html.replace(marker, expected_html + marker, 1)
     return updated, True
 
 
@@ -369,6 +374,11 @@ def main():
         )
 
         needs_body_update = thumb_changed or banner_changed
+
+        # サムネイル同期・バナー同期のどちらも1行圧縮前提で組み立てているが、万一どちらかが改行を
+        # 混入させた場合の保険として、送信直前に本文全体をmain.py側と同じロジックで再圧縮する。
+        if needs_body_update:
+            body_after_banner = compact_html_for_description(body_after_banner)
 
         if not needs_team and not needs_body_update:
             continue  # このentryは対応不要

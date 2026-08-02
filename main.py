@@ -418,6 +418,23 @@ SOURCE_SITE_NAMES = {
     "web.gekisaka.jp": "ゲキサカ",
     "gekisaka.jp": "ゲキサカ",
     "news.google.com": "Google News",
+    # 日本の主要スポーツ紙・通信社（未登録ドメインだと英語のフォールバック表記になってしまうため追加）
+    "daily.co.jp": "デイリースポーツ",
+    "nikkansports.com": "日刊スポーツ",
+    "sponichi.co.jp": "スポニチアネックス",
+    "sanspo.com": "サンスポ",
+    "hochi.news": "スポーツ報知",
+    "jiji.com": "時事通信",
+    "asahi.com": "朝日新聞",
+    "nikkei.com": "日本経済新聞",
+    "mainichi.jp": "毎日新聞",
+    "chunichi.co.jp": "中日スポーツ",
+    "tokyo-sports.co.jp": "東京スポーツ",
+    "full-count.jp": "Full-Count",
+    "theanswer.jp": "THE ANSWER",
+    "soccerdigestweb.com": "サッカーダイジェストWeb",
+    "footballchannel.jp": "フットボールチャンネル",
+    "number.bunshun.jp": "Number Web",
 }
 
 
@@ -755,6 +772,28 @@ def build_goods_ad_html(category, player_name, team_name):
     return ad["html"].format(link_text=link_text)
 
 
+def compact_html_for_description(html):
+    """本文HTMLの改行・インデントを1行に圧縮する。
+    Livedoorの<$ArticleDescription$>（meta description自動生成タグ）はHTMLタグを除去した
+    プレーンテキストをそのまま使う仕様のため、単純に全行を空白区切りで結合すると、
+    実テキストを持たないタグだけの行（<div>や<img>等）の区切りスペースがタグ除去後もそのまま
+    残ってしまい、本文冒頭に構造タグの数だけ空白が並ぶ問題があった（2026/7/26に一度対策したが
+    完全には解消していないことが2026/8/3の実機確認で判明）。
+    実テキストを含む行の前にだけ区切りスペースを入れることで、タグ除去後に残る余分な空白を
+    最小限にする。"""
+    lines = [line.strip() for line in html.split("\n") if line.strip()]
+    result = ""
+    seen_text = False  # 最初の実テキストの手前には区切りスペース自体を入れない（冒頭の空白を完全に無くすため）
+    for line in lines:
+        has_text = bool(re.sub(r"<[^>]+>", "", line).strip())
+        if has_text and seen_text and result and not result.endswith(" "):
+            result += " "
+        result += line
+        if has_text:
+            seen_text = True
+    return re.sub(r" {2,}", " ", result).strip()
+
+
 def build_blog_body(category, player_name, team_name, summary_lines, source_url):
     """元デザイン（3行要約リスト・選手グッズ個別リンク・VOD広告）に沿った記事本文HTMLを組み立てる"""
     summary_html = "\n".join(f"            <li>{line}</li>" for line in summary_lines)
@@ -801,12 +840,7 @@ def build_blog_body(category, player_name, team_name, summary_lines, source_url)
     </div>
     """
 
-    # Livedoorの<$ArticleDescription$>（meta description自動生成タグ）が、HTMLタグ除去後の
-    # 生テキストをそのまま使うため、上記テンプレートのインデント・改行がディスクリプション冒頭に
-    # 大量の空白として出てしまう。タグだけの行が残す空行も含めて、空白1つ区切りに圧縮して影響を無くす。
-    blog_body = " ".join(line.strip() for line in blog_body.split("\n") if line.strip())
-    blog_body = re.sub(r" {2,}", " ", blog_body)
-    return blog_body
+    return compact_html_for_description(blog_body)
 
 
 def send_to_blog(subject, body_html, category, team_name=None, publish=True):
