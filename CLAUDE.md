@@ -3,7 +3,7 @@
 このファイルはプロジェクトの引き継ぎ・進行記録です。次のチャットの冒頭にそのまま貼り付けて使ってください。
 **今後、作業内容が変わるたびにこのファイルを随時更新していきます。**
 
-最終更新：2026年8月1日（クリケット等の重複投稿修正・記事本文の厚み増強・記事ページSNSシェアボタン追加・AI記事の紋切り型表現/文内語重複を抑制するプロンプト強化を反映）
+最終更新：2026年8月6日（Cloudflare Pages/D1への移行を開始・main.pyの配信先をD1優先に切り替え・ライブドアはバックグラウンドミラー化）
 
 **⚠️ リポジトリは2026/7/22よりPublic（公開）設定です。** コード内容は誰でも閲覧可能（Secretsは非公開のまま）。
 
@@ -267,6 +267,27 @@ livedoor_monthly_archive.html          # 月別アーカイブテンプレート
 - **✅ 2026/8/1完了**：3件ともGitHubへコミット・プッシュ済み。SNSシェアボタンはマコトさんがライブドア管理画面（個別記事ページ・CSS）へ反映し、実機で動作確認済み（クリック時に正しいURL・タイトルでシェア画面が開くことを確認）。main.py側の2件（重複投稿修正・本文厚み増強）は次回以降の投稿で本番効果の検証が必要（6章参照）。
 - **注意**：このセッションと同時並行で、AI記事の紋切り型表現を抑制する別セッションの作業（4-21）が同じ`main.py`/`CLAUDE.md`に対して走っており、GitHubへのpush時にリベース競合が発生した。`main.py`側は編集箇所が重ならず自動マージ、`CLAUDE.md`側はセクション番号の重複（どちらも「4-21」を名乗っていた）を手動で解消し、本セクションを4-22として採番し直した。
 
+### 4-23. Cloudflare Pages/D1への移行開始（2026/8/3〜8/6）
+- **背景**：ライブドアブログ（無料プラン）からの脱却を見据え、Cloudflare Pages（配信）＋D1（記事データベース）への移行を開始。ライブドアは当面「バックグラウンドミラー」として並行稼働させ、段階的に主従を入れ替える方針。
+- **Cloudflare側の構成**（2026/8/3〜8/4、別セッションで構築）：
+  - Pagesプロジェクト「transferbreaking」、D1データベース「transferbreaking-db」（`wrangler.toml`に`database_id`登録済み）を作成。
+  - `cloudflare/schema.sql`：`articles`テーブル定義（`source_url_normalized`にUNIQUE制約＝main.py側4-22の正規化URL重複防止ロジックと連動する設計）。
+  - `cloudflare/functions/`：Pages Functions実装。`api/articles.ts`（main.pyからの投稿受付API、`X-Ingest-Secret`ヘッダー認証）、`index.ts`（トップページ、D1から最新20件表示）、`article/[slug].ts`（個別記事ページ、サムネ・広告・出典・NewsArticle JSON-LD構造化データ込み）、`_shared/config.ts`・`_shared/layout.ts`（共通レイアウト・カテゴリラベル）。
+  - **✅ 2026/8/6実機確認で判明**：PagesプロジェクトはCloudflareダッシュボード側で**GitHubリポジトリ（`transferbreiking-lgtm/isekizidouka`）とGit連携済み・自動デプロイ有効**（ビルド出力：`public`、ルートディレクトリ：`cloudflare`、本番ブランチ：`main`）。つまり**今後は`cloudflare/`配下やmain.pyの変更をGitHubへpushするだけで自動的に本番デプロイされる**。ローカルの`wrangler`コマンドはこのセッションの環境では原因不明のハング（トークン付き実行時のみ・APIへのcurl直叩きは正常動作）が頻発したため、確認・調整作業は極力Cloudflare REST APIへのcurl直叩きで行う方が安定する。
+- **main.py側の連携実装**（2026/8/3〜8/4、別セッション）：
+  - `post_to_d1()`を追加。D1（`D1_INGEST_URL`＝Pages Functionsの`/api/articles`）への投稿成功を「配信成功」の判定基準とし、**ライブドアへの投稿は`send_to_blog_background()`としてD1成功後のbest-effortミラーに格下げ**。ライブドア投稿が失敗してもメイン処理は継続する。
+  - `.github/workflows/main.yml`に`D1_INGEST_SECRET`のsecrets受け渡しを追加。
+- **✅ 2026/8/6のセッションで対応（このセッション）**：
+  1. 上記のCloudflare関連ファイル・main.py・main.ymlの変更が**一度もGitHubにコミットされていなかった**ことが判明→コミット・push完了（コミット`c6a1853`）。`.wrangler/`はキャッシュのため`.gitignore`に追加。
+  2. GitHub Secretsに`D1_INGEST_SECRET`が**未設定**だったことが判明（他の5つのSecretsは既存）→新しいランダム値（64桁hex）を生成し、GitHub Secrets・Cloudflare Pages環境変数`INGEST_SECRET`の両方に同じ値を設定して整合。
+  3. D1へのschema適用状況を確認 → `articles`テーブル作成済み（適用済み）。ただし本番記事はまだ0件（テスト投稿2件のみ）。
+  4. Pagesの自動デプロイ発火を確認 → 直近のpush（`22e7faa`）から`github:push`トリガーでビルド・デプロイが正常完了（デプロイID`900e702f`）。
+- **⚠️ 未検証・次回確認事項**：
+  1. **main.pyから実際にD1へ記事投稿が成功するか**：次回のGitHub Actions定期実行（or手動実行）で、`post_to_d1()`が401等でエラーにならず記事が実際にD1へ書き込まれるか確認。失敗時はログの`D1への投稿に失敗しました`前後を確認すること。
+  2. **ライブドアへのバックグラウンドミラー投稿が引き続き正常動作するか**：D1側が主、ライブドアが従になったことで意図せず投稿が止まっていないか確認。
+  3. **Cloudflare側の新サイトのデザイン・機能はまだ最小構成**：`cloudflare/functions/_shared/layout.ts`はインラインCSSのみの簡易デザインで、ライブドア版にあるカテゴリアーカイブ／チーム別アーカイブ／月別アーカイブ／SNSシェアボタン／サイドバー／広告導線（ABEMA・SPORTS GOODS等）／GSC所有権確認等は**まだ移植されていない**。本格的に主力サイトを切り替える前に実装が必要。
+- **教訓**：GitHubへの`.github/workflows/*.yml`を含むpushには、Classicトークンでも**`repo`スコープに加えて`workflow`スコープが必須**（`repo`のみだと`refusing to allow a Personal Access Token to create or update workflow ... without workflow scope`で拒否される）。8-2のトークン発行手順を更新済み（下記参照）。
+
 ## 8. 運用効率化ルール（2026/7/22追加・「やり直しが多い」への対策）
 
 今回、ライブドア側だけ更新してGitHub側が長期間放置されていたこと、およびGitHubトークン発行でfine-grained→classicと2往復したことが、やり直し作業の主因だった。再発防止のため以下をルール化する。
@@ -274,15 +295,15 @@ livedoor_monthly_archive.html          # 月別アーカイブテンプレート
 ### 8-1. デザインファイルは「2点セット」で必ず同時に完了させる
 ライブドアの管理画面にHTML/CSSを貼り付けたら、**同じセッション内で必ずGitHubにもコミット・プッシュする**。どちらか片方だけで終わらせない。今回、livedoor_*ファイルが1年近くGitHubに一度も上がっていなかったことが判明したのはこのルール不徹底が原因。
 
-### 8-2. GitHubトークンは最初から「Classic・repoスコープのみ」で発行する
+### 8-2. GitHubトークンは最初から「Classic・repo＋workflowスコープ」で発行する
 Fine-grainedトークンはリポジトリ選択・組織承認まわりで詰まりやすいことが今回判明した。**次回以降は最初からこの手順を案内する**：
 1. https://github.com/settings/tokens を開く（`?type=beta`は付けない＝Classic版）
 2. 「Generate new token (classic)」
 3. Expirationは`7 days`
-4. スコープは**「repo」の大チェック1つだけ**
+4. スコープは**「repo」に加えて「workflow」にもチェック**（`.github/workflows/*.yml`を変更するpushは`repo`だけだと拒否されることが2026/8/6判明。4-23参照）
 5. 生成されたトークンをそのまま貼ってもらう
 
-これで今回発生した「0件エラー」「アカウント確認」「type=beta再発行」の3往復が発生しなくなる。
+これで今回発生した「0件エラー」「アカウント確認」「type=beta再発行」の3往復や、workflowスコープ不足によるpush拒否が発生しなくなる。
 
 ### 8-3. トークンは毎回使い捨て・作業後は必ず削除
 セキュリティ上、長期保存はしない方針を継続する。7日の有効期限に加え、作業完了後は`https://github.com/settings/tokens`から手動削除を都度案内する。
