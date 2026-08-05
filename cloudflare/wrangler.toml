@@ -1,0 +1,8 @@
+name = "transferbreaking"
+compatibility_date = "2026-08-01"
+pages_build_output_dir = "public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "transferbreaking-db"
+database_id = "c350b757-38ed-4d93-afcb-ee2d97e34a4a"

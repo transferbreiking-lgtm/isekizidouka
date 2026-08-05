@@ -32,6 +32,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           LIVEDOOR_BLOG_ID: ${{ secrets.LIVEDOOR_BLOG_ID }}
           LIVEDOOR_API_KEY: ${{ secrets.LIVEDOOR_API_KEY }}
+          D1_INGEST_SECRET: ${{ secrets.D1_INGEST_SECRET }}
         run: python main.py
 
       - name: Commit and Push processed_urls.txt

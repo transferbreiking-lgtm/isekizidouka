@@ -2,9 +2,11 @@ import os
 import re
 import sys
 import time
+import uuid
 import random
 import urllib.parse
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone, timedelta
 import feedparser
 import requests
 from requests.auth import HTTPBasicAuth
@@ -221,6 +223,12 @@ LIVEDOOR_BLOG_ID = os.environ.get("LIVEDOOR_BLOG_ID")
 LIVEDOOR_API_KEY = os.environ.get("LIVEDOOR_API_KEY")
 # チーム別カテゴリアーカイブのURL組み立てに使う独自ドメイン（末尾スラッシュ必須）
 BLOG_BASE_URL = os.environ.get("BLOG_BASE_URL", "https://transferbreaking.officialblog.jp/")
+
+# Cloudflare（新本番）への投稿先。D1書き込み用APIエンドポイントと、その認証シークレット。
+# 2026/8/4のCloudflare移行により、D1側を本番の投稿先とし、Livedoorはバックグラウンド
+# （従属的なミラー先）として維持する運用に切り替えた。
+D1_INGEST_URL = os.environ.get("D1_INGEST_URL", "https://transferbreaking.pages.dev/api/articles")
+D1_INGEST_SECRET = os.environ.get("D1_INGEST_SECRET")
 
 # OpenRouterのフォールバック先モデル（無料枠モデル）
 # ※ deepseek/deepseek-chat-v3-0324:free は2026年7月時点で無料枠が廃止され有料化された。
@@ -843,6 +851,70 @@ def build_blog_body(category, player_name, team_name, summary_lines, source_url)
     return compact_html_for_description(blog_body)
 
 
+JST = timezone(timedelta(hours=9))
+
+
+def generate_article_slug(category):
+    """D1のarticles.slugに使うユニークなスラッグを組み立てる（日本語タイトルはURLに向かないため使わない）"""
+    timestamp = datetime.now(JST).strftime("%Y%m%d%H%M%S")
+    return f"{category.lower()}-{timestamp}-{uuid.uuid4().hex[:6]}"
+
+
+def post_to_d1(title, category, player_name, team_name, summary_lines, source_url, source_url_normalized):
+    """Cloudflare D1（2026/8/4以降の本番投稿先）へ記事を書き込む。
+
+    Cloudflare Pages Functions側のAPI（cloudflare/functions/api/articles.ts）にHTTP POSTする方式。
+    D1書き込みの成否がその記事の「配信成功」を左右する（Livedoorへの投稿は従属的なバックグラウンド
+    ミラーとして別途best-effortで行う。send_to_blog_background参照）。
+
+    戻り値: 成功したslug文字列。失敗時はNone。
+    """
+    if not D1_INGEST_SECRET:
+        print("エラー: D1_INGEST_SECRET が設定されていないため、D1への投稿をスキップします。")
+        return None
+
+    slug = generate_article_slug(category)
+    payload = {
+        "slug": slug,
+        "category": category,
+        "player_name": player_name,
+        "team_name": team_name,
+        "title": title,
+        "summary_lines": summary_lines,
+        "source_url": source_url,
+        "source_url_normalized": source_url_normalized,
+        "source_name": get_source_name(source_url),
+        "published_at": datetime.now(JST).isoformat(),
+    }
+
+    try:
+        response = requests.post(
+            D1_INGEST_URL,
+            json=payload,
+            headers={"X-Ingest-Secret": D1_INGEST_SECRET},
+            timeout=30,
+        )
+        if response.status_code in (200, 201):
+            print(f"D1への投稿に成功しました: {title} (slug={slug})")
+            return slug
+        print(f"D1への投稿に失敗しました。ステータスコード: {response.status_code} / レスポンス: {response.text[:300]}")
+        return None
+    except Exception as e:
+        print(f"D1投稿APIの呼び出しエラー: {e}")
+        return None
+
+
+def send_to_blog_background(subject, body_html, category, team_name=None, publish=True):
+    """Livedoorへのバックグラウンド投稿。D1への本番投稿が成功した後にbest-effortで実行し、
+    失敗してもメイン処理（配信成功の判定）には影響させない（2026/8/4のCloudflare移行後の位置づけ）。"""
+    try:
+        success = send_to_blog(subject, body_html, category, team_name=team_name, publish=publish)
+        if not success:
+            print("Livedoorへのバックグラウンド投稿に失敗しましたが、D1側は既に成功しているため処理は継続します。")
+    except Exception as e:
+        print(f"Livedoorへのバックグラウンド投稿中に例外が発生しましたが、D1側は既に成功しているため処理は継続します: {e}")
+
+
 def send_to_blog(subject, body_html, category, team_name=None, publish=True):
     """AtomPub APIを使ってライブドアブログへ記事を投稿する
 
@@ -992,13 +1064,18 @@ def main():
 
                 blog_body = build_blog_body(category, player_name, team_name, summary_lines, resolved_url)
 
-                success = send_to_blog(blog_title, blog_body, category, team_name=team_name, publish=True)
-                if success:
+                # 2026/8/4のCloudflare移行以降、D1への投稿成功を「配信成功」の判定基準にする。
+                # Livedoorへの投稿はバックグラウンドのミラーとして、D1成功後にbest-effortで行う。
+                d1_slug = post_to_d1(blog_title, category, player_name, team_name, summary_lines, resolved_url, norm_resolved)
+                if d1_slug:
                     save_processed_url(url)
                     if resolved_url != url:
                         save_processed_url(resolved_url)
+                    send_to_blog_background(blog_title, blog_body, category, team_name=team_name, publish=True)
                     print("1件の配信処理が正常終了したため、スクリプトを終了します。")
                     sys.exit(0)
+                else:
+                    print("D1への投稿に失敗したため、このURLは既読化せず次回リトライ対象として残します。")
 
 
 if __name__ == "__main__":
