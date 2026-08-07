@@ -156,6 +156,18 @@ livedoor_monthly_archive.html          # 月別アーカイブテンプレート
 
 **固定ページ非対応の回避策（4-14）**：運営者情報等は通常記事として投稿し、投稿日を過去日付に設定。サイト内リンクはメニューバー公式パーツではなく、4テンプレート共通の`<footer>`内に直接HTMLでハードコード（`.footer-links`）。
 
+### 4-24. TransferChronicleの派生・OTHERカテゴリーのeスポーツ化・Cloudflare/D1連携の巻き戻し（2026/8/7）
+
+- **方針転換**：TransferBreaking（本サイト・Livedoor）はCloudflareへ移行せず、このまま存続させる。派生サイトとして新規に「TransferChronicle」を立ち上げ、そちらをCloudflare Pages/D1で構築する（4-23で進めていたCloudflare移行はTransferChronicle側の話に切り替え）。TransferBreakingに投稿されたデータは、TransferChronicleへの流用元として使う想定（連携方法は未確定・次回検討）。
+- **OTHERカテゴリー→ESPORTS（eスポーツ）へ変更**：これまで「分類できなかった記事の受け皿」だった`OTHER`（ラベル「スポーツ」）を廃止し、新規に`ESPORTS`（ラベル「eスポーツ」）を専用カテゴリーとして新設した。他の12カテゴリーと同じく専用のRSS・Google News検索クエリを持つ（[main.py](main.py)の`RSS_URLS_BY_CATEGORY`／`SPORT_QUERIES`／`SPORT_QUERIES_EN`）。
+  - 公式RSS：HLTV.org（Counter-Strike）、Esports Insider（業界全般）。2026/8/7実在確認済み。
+  - `CATEGORY_LABELS`／`THUMBNAIL_IMAGES`／`AFFILIATE_ADS`のOTHER項目もESPORTSに置き換え済み。
+  - **⚠️ 未対応**：`THUMBNAIL_IMAGES["ESPORTS"]`は暫定的に旧OTHER用バナー画像を流用中。eスポーツ専用バナーをライブドアにアップロードし、URLを差し替える必要がある。
+  - **注意**：この変更により、13競技のうちどれにも当てはまらない「分類漏れ」の受け皿が無くなった。ゴルフ・テニス・陸上等、既存12カテゴリー＋eスポーツに当てはまらない移籍ニュースはAIが誤ってどれかのカテゴリーに寄せて分類するか、そもそも記事化されない可能性がある（想定内の判断として実施）。
+- **CloudflareD1連携の巻き戻し**：4-23で実装した「D1への投稿成功＝配信成功、Livedoorはbest-effortミラー」というロジックを撤回。`post_to_d1()`・`send_to_blog_background()`・`generate_article_slug()`・`D1_INGEST_URL`／`D1_INGEST_SECRET`を`main.py`から削除し、`send_to_blog()`（Livedoor直接投稿）を再び「配信成功」の判定基準に戻した。`.github/workflows/main.yml`から`D1_INGEST_SECRET`の受け渡しも削除（あわせて、main.pyでは既に使っていない`MISTRAL_API_KEY`の受け渡しも整理）。
+  - **⚠️ 未対応**：GitHub Secretsの`D1_INGEST_SECRET`自体の削除、Cloudflare Pages環境変数`INGEST_SECRET`の扱い（TransferChronicle用に転用するか再発行するか）は未着手。
+  - **⚠️ 未確認**：リポジトリ内の`cloudflare/`フォルダ（Pages Functions・schema.sql等）を今後どう扱うか（TransferChronicle用に流用するか、別リポジトリに切り出すか）は次回検討が必要。
+
 ## 6. 未完了・次にやること（優先順）
 
 1. **【要検証】紋切り型表現抑制プロンプト（4-21参照）の効果確認**：次回投稿以降、`check_cliche_and_repetition()`のログで禁止ワード・文内重複の検知が発生していないか確認。発生していれば禁止ワードリストの追加やプロンプトのさらなる調整が必要

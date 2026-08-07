@@ -2,11 +2,9 @@ import os
 import re
 import sys
 import time
-import uuid
 import random
 import urllib.parse
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone, timedelta
 import feedparser
 import requests
 from requests.auth import HTTPBasicAuth
@@ -40,6 +38,10 @@ RSS_URLS_BY_CATEGORY = {
     ],
     "ICE_HOCKEY": [
         "https://www.espn.com/espn/rss/nhl/news",              # ESPN NHL（同上）
+    ],
+    "ESPORTS": [
+        "https://www.hltv.org/rss/news",                       # HLTV.org（Counter-Strike専門、2026/8/7実在確認済み）
+        "https://esportsinsider.com/feed",                     # Esports Insider（eスポーツ業界全般、2026/8/7実在確認済み）
     ],
 }
 
@@ -147,6 +149,13 @@ SPORT_QUERIES = {
         "F1 移籍 -site:yahoo.co.jp",
         "MotoGP 移籍 -site:yahoo.co.jp",
     ],
+    "ESPORTS": [
+        "eスポーツ 移籍 -site:yahoo.co.jp",
+        "League of Legends 移籍 -site:yahoo.co.jp",
+        "VALORANT 移籍 -site:yahoo.co.jp",
+        "CS2 移籍 -site:yahoo.co.jp",
+        "eスポーツ 契約 -site:yahoo.co.jp",
+    ],
 }
 
 # ③ 英語版Google Newsキーワード検索（海外メディア発の一次情報を拾うための構成）。
@@ -213,6 +222,12 @@ SPORT_QUERIES_EN = {
         "F1 driver signs contract",
         "MotoGP rider signs contract",
     ],
+    "ESPORTS": [
+        "esports player signs",
+        "esports roster move",
+        "League of Legends roster change",
+        "VALORANT roster move",
+    ],
 }
 
 DB_FILE = "processed_urls.txt"
@@ -223,12 +238,6 @@ LIVEDOOR_BLOG_ID = os.environ.get("LIVEDOOR_BLOG_ID")
 LIVEDOOR_API_KEY = os.environ.get("LIVEDOOR_API_KEY")
 # チーム別カテゴリアーカイブのURL組み立てに使う独自ドメイン（末尾スラッシュ必須）
 BLOG_BASE_URL = os.environ.get("BLOG_BASE_URL", "https://transferbreaking.officialblog.jp/")
-
-# Cloudflare（新本番）への投稿先。D1書き込み用APIエンドポイントと、その認証シークレット。
-# 2026/8/4のCloudflare移行により、D1側を本番の投稿先とし、Livedoorはバックグラウンド
-# （従属的なミラー先）として維持する運用に切り替えた。
-D1_INGEST_URL = os.environ.get("D1_INGEST_URL", "https://transferbreaking.pages.dev/api/articles")
-D1_INGEST_SECRET = os.environ.get("D1_INGEST_SECRET")
 
 # OpenRouterのフォールバック先モデル（無料枠モデル）
 # ※ deepseek/deepseek-chat-v3-0324:free は2026年7月時点で無料枠が廃止され有料化された。
@@ -268,7 +277,8 @@ THUMBNAIL_IMAGES = {
     "RUGBY": "https://livedoor.blogimg.jp/transfer_breiking/imgs/7/2/725eb216.png",
     "CRICKET": "https://livedoor.blogimg.jp/transfer_breiking/imgs/f/6/f67875e2.jpg",
     "MOTORSPORT": "https://livedoor.blogimg.jp/transfer_breiking/imgs/a/b/ab625684.jpg",
-    "OTHER": "https://livedoor.blogimg.jp/transfer_breiking/imgs/0/f/0f2ab819.jpg",
+    # TODO: eスポーツ専用バナーをライブドアにアップロードし、このURLを差し替えること（それまでは旧OTHER用バナーを暫定流用）
+    "ESPORTS": "https://livedoor.blogimg.jp/transfer_breiking/imgs/0/f/0f2ab819.jpg",
 }
 
 # 競技カテゴリごとのアフィリエイト広告（ad-sectionに表示するリンク）
@@ -319,8 +329,8 @@ AFFILIATE_ADS = {
     "MOTORSPORT": [
         f'<a href="{ABEMA_AFFILIATE_URL}" target="_blank" rel="nofollow noopener">【ABEMA】F1・MotoGP関連配信はこちら</a>',
     ],
-    "OTHER": [
-        f'<a href="{ABEMA_AFFILIATE_URL}" target="_blank" rel="nofollow noopener">【ABEMA】注目のスポーツ配信サービスはこちら</a>',
+    "ESPORTS": [
+        f'<a href="{ABEMA_AFFILIATE_URL}" target="_blank" rel="nofollow noopener">【ABEMA】eスポーツ関連配信はこちら</a>',
     ],
 }
 
@@ -385,7 +395,7 @@ CATEGORY_LABELS = {
     "RUGBY": "ラグビー",
     "CRICKET": "クリケット",
     "MOTORSPORT": "モータースポーツ",
-    "OTHER": "スポーツ",
+    "ESPORTS": "eスポーツ",
 }
 
 # 出典リンクの表示名マッピング（ドメイン → サイト名）。
@@ -716,7 +726,7 @@ def check_and_summarize_with_gemini(title, summary_text):
 def parse_ai_output(output_text):
     """AIの出力テキストからカテゴリ・選手名・チーム名・タイトル・要約(箇条書きリスト)を分解・抽出する"""
     lines = output_text.split("\n")
-    category = "OTHER"
+    category = "ESPORTS"
     player_name = ""
     team_name = ""
     title = ""
@@ -739,7 +749,7 @@ def parse_ai_output(output_text):
             summary_lines.append(line.strip().lstrip("・").strip())
 
     if category not in AFFILIATE_ADS:
-        category = "OTHER"
+        category = "ESPORTS"
 
     if player_name in ("", "不明", "None"):
         player_name = None
@@ -775,7 +785,7 @@ def build_goods_ad_html(category, player_name, team_name):
     elif player_name:
         subject = player_name
     else:
-        subject = CATEGORY_LABELS.get(category, CATEGORY_LABELS["OTHER"])
+        subject = CATEGORY_LABELS.get(category, CATEGORY_LABELS["ESPORTS"])
     link_text = f"{subject}関連のグッズを探すなら【{ad['name']}】"
     return ad["html"].format(link_text=link_text)
 
@@ -807,17 +817,17 @@ def build_blog_body(category, player_name, team_name, summary_lines, source_url)
     summary_html = "\n".join(f"            <li>{line}</li>" for line in summary_lines)
 
     # 楽天・Amazonは現在未提携のため広告表示なし（提携完了後に再実装する）。
-    ad_candidates = AFFILIATE_ADS.get(category, AFFILIATE_ADS["OTHER"])
+    ad_candidates = AFFILIATE_ADS.get(category, AFFILIATE_ADS["ESPORTS"])
     vod_ad_html = random.choice(ad_candidates)
     goods_ad_html = build_goods_ad_html(category, player_name, team_name)
 
-    thumbnail_url = THUMBNAIL_IMAGES.get(category, THUMBNAIL_IMAGES["OTHER"])
+    thumbnail_url = THUMBNAIL_IMAGES.get(category, THUMBNAIL_IMAGES["ESPORTS"])
     source_name = get_source_name(source_url)
 
     # 記事下部には「同カテゴリ（親タグ）の記事一覧」への導線バナーを常に表示する。
     # チーム別の導線は、記事上部の赤バッジ（<$ArticleCategory1$>の右隣に並ぶ<$ArticleCategory2$>）が
     # 既に担っているため、記事下部は元々の設計どおり親カテゴリへのリンクに統一する。
-    category_label = CATEGORY_LABELS.get(category, CATEGORY_LABELS["OTHER"])
+    category_label = CATEGORY_LABELS.get(category, CATEGORY_LABELS["ESPORTS"])
     category_archive_url = build_team_archive_url(category_label)  # 「チーム名」に限らず任意のカテゴリ名でアーカイブURLを組み立てられる汎用関数として利用
     related_html = f"""
         <div class="related-team-section" style="margin-top:16px; padding:10px 14px; background:#1a1a1c; border-left:3px solid #e4002b;">
@@ -851,70 +861,6 @@ def build_blog_body(category, player_name, team_name, summary_lines, source_url)
     return compact_html_for_description(blog_body)
 
 
-JST = timezone(timedelta(hours=9))
-
-
-def generate_article_slug(category):
-    """D1のarticles.slugに使うユニークなスラッグを組み立てる（日本語タイトルはURLに向かないため使わない）"""
-    timestamp = datetime.now(JST).strftime("%Y%m%d%H%M%S")
-    return f"{category.lower()}-{timestamp}-{uuid.uuid4().hex[:6]}"
-
-
-def post_to_d1(title, category, player_name, team_name, summary_lines, source_url, source_url_normalized):
-    """Cloudflare D1（2026/8/4以降の本番投稿先）へ記事を書き込む。
-
-    Cloudflare Pages Functions側のAPI（cloudflare/functions/api/articles.ts）にHTTP POSTする方式。
-    D1書き込みの成否がその記事の「配信成功」を左右する（Livedoorへの投稿は従属的なバックグラウンド
-    ミラーとして別途best-effortで行う。send_to_blog_background参照）。
-
-    戻り値: 成功したslug文字列。失敗時はNone。
-    """
-    if not D1_INGEST_SECRET:
-        print("エラー: D1_INGEST_SECRET が設定されていないため、D1への投稿をスキップします。")
-        return None
-
-    slug = generate_article_slug(category)
-    payload = {
-        "slug": slug,
-        "category": category,
-        "player_name": player_name,
-        "team_name": team_name,
-        "title": title,
-        "summary_lines": summary_lines,
-        "source_url": source_url,
-        "source_url_normalized": source_url_normalized,
-        "source_name": get_source_name(source_url),
-        "published_at": datetime.now(JST).isoformat(),
-    }
-
-    try:
-        response = requests.post(
-            D1_INGEST_URL,
-            json=payload,
-            headers={"X-Ingest-Secret": D1_INGEST_SECRET},
-            timeout=30,
-        )
-        if response.status_code in (200, 201):
-            print(f"D1への投稿に成功しました: {title} (slug={slug})")
-            return slug
-        print(f"D1への投稿に失敗しました。ステータスコード: {response.status_code} / レスポンス: {response.text[:300]}")
-        return None
-    except Exception as e:
-        print(f"D1投稿APIの呼び出しエラー: {e}")
-        return None
-
-
-def send_to_blog_background(subject, body_html, category, team_name=None, publish=True):
-    """Livedoorへのバックグラウンド投稿。D1への本番投稿が成功した後にbest-effortで実行し、
-    失敗してもメイン処理（配信成功の判定）には影響させない（2026/8/4のCloudflare移行後の位置づけ）。"""
-    try:
-        success = send_to_blog(subject, body_html, category, team_name=team_name, publish=publish)
-        if not success:
-            print("Livedoorへのバックグラウンド投稿に失敗しましたが、D1側は既に成功しているため処理は継続します。")
-    except Exception as e:
-        print(f"Livedoorへのバックグラウンド投稿中に例外が発生しましたが、D1側は既に成功しているため処理は継続します: {e}")
-
-
 def send_to_blog(subject, body_html, category, team_name=None, publish=True):
     """AtomPub APIを使ってライブドアブログへ記事を投稿する
 
@@ -940,7 +886,7 @@ def send_to_blog(subject, body_html, category, team_name=None, publish=True):
     content_elm = ET.SubElement(entry, "content", attrib={"type": "text/html"})
     content_elm.text = body_html
 
-    category_label = CATEGORY_LABELS.get(category, CATEGORY_LABELS["OTHER"])
+    category_label = CATEGORY_LABELS.get(category, CATEGORY_LABELS["ESPORTS"])
     ET.SubElement(entry, "category", attrib={
         "scheme": f"https://livedoor.blogcms.jp/atompub/{LIVEDOOR_BLOG_ID}/category",
         "term": category_label,
@@ -1064,18 +1010,15 @@ def main():
 
                 blog_body = build_blog_body(category, player_name, team_name, summary_lines, resolved_url)
 
-                # 2026/8/4のCloudflare移行以降、D1への投稿成功を「配信成功」の判定基準にする。
-                # Livedoorへの投稿はバックグラウンドのミラーとして、D1成功後にbest-effortで行う。
-                d1_slug = post_to_d1(blog_title, category, player_name, team_name, summary_lines, resolved_url, norm_resolved)
-                if d1_slug:
+                success = send_to_blog(blog_title, blog_body, category, team_name=team_name, publish=True)
+                if success:
                     save_processed_url(url)
                     if resolved_url != url:
                         save_processed_url(resolved_url)
-                    send_to_blog_background(blog_title, blog_body, category, team_name=team_name, publish=True)
                     print("1件の配信処理が正常終了したため、スクリプトを終了します。")
                     sys.exit(0)
                 else:
-                    print("D1への投稿に失敗したため、このURLは既読化せず次回リトライ対象として残します。")
+                    print("ブログへの投稿に失敗したため、このURLは既読化せず次回リトライ対象として残します。")
 
 
 if __name__ == "__main__":
