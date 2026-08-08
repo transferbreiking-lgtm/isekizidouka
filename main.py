@@ -3,8 +3,10 @@ import re
 import sys
 import time
 import random
+import difflib
 import urllib.parse
 import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, timezone
 import feedparser
 import requests
 from requests.auth import HTTPBasicAuth
@@ -231,6 +233,19 @@ SPORT_QUERIES_EN = {
 }
 
 DB_FILE = "processed_urls.txt"
+
+# 「複数メディアが同じ実世界の移籍ニュースを別々のURLで報じる」ケースの重複投稿対策用ファイル。
+# processed_urls.txt（URL単位の既読管理）だけでは、別掲載元・別URLの記事を防げないため、
+# 「カテゴリ＋選手名」という記事の中身ベースで直近の投稿を記録する（2026/8/8・4-26参照）。
+RECENT_TOPICS_FILE = "recent_topics.txt"
+# 同一カテゴリ・同一選手（類似含む）の記事を「重複」とみなす期間。
+# 短すぎると数時間ちがいの続報を取りこぼし、長すぎると噂→公式発表のような正当な続報まで
+# ブロックしてしまうため、実際に観測された重複間隔（1日）を踏まえて4日に設定。
+DUPLICATE_TOPIC_WINDOW_DAYS = 4
+# recent_topics.txtの肥大化を防ぐための保持期間（判定に使うウィンドウより長めに確保）
+DUPLICATE_TOPIC_RETENTION_DAYS = 10
+# 選手名の表記ゆれ（例：「アブラル・アフマド」/「アブラル・アフメド」）を吸収するための類似度しきい値
+PLAYER_NAME_SIMILARITY_THRESHOLD = 0.75
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")  # フォールバック用（無料枠）
@@ -550,6 +565,70 @@ def save_processed_url(url):
     """新しく投稿（またはスルー）したURLを既読リストファイルへ追記する"""
     with open(DB_FILE, "a", encoding="utf-8") as f:
         f.write(url + "\n")
+
+
+def load_recent_topics():
+    """recent_topics.txt（日付|カテゴリ|選手名）を読み込み、リストで返す"""
+    if not os.path.exists(RECENT_TOPICS_FILE):
+        return []
+    topics = []
+    with open(RECENT_TOPICS_FILE, "r", encoding="utf-8") as f:
+        for line in f:
+            parts = line.strip().split("|", 2)
+            if len(parts) != 3:
+                continue
+            date_str, category, player_name = parts
+            try:
+                date = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            topics.append((date, category, player_name))
+    return topics
+
+
+def prune_recent_topics(topics):
+    """保持期間（DUPLICATE_TOPIC_RETENTION_DAYS）を過ぎた古いレコードを間引き、
+    間引きが発生した場合のみファイルを書き直す（肥大化防止）"""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=DUPLICATE_TOPIC_RETENTION_DAYS)
+    kept = [t for t in topics if t[0] >= cutoff]
+    if len(kept) != len(topics):
+        with open(RECENT_TOPICS_FILE, "w", encoding="utf-8") as f:
+            for date, category, player_name in kept:
+                f.write(f"{date.strftime('%Y-%m-%d')}|{category}|{player_name}\n")
+    return kept
+
+
+def save_recent_topic(category, player_name):
+    """投稿成功時に「カテゴリ＋選手名」を記録する（重複トピック判定用）"""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    with open(RECENT_TOPICS_FILE, "a", encoding="utf-8") as f:
+        f.write(f"{today}|{category}|{player_name}\n")
+
+
+def is_recent_duplicate_topic(category, player_name, recent_topics):
+    """同一カテゴリで、直近DUPLICATE_TOPIC_WINDOW_DAYS日以内に類似した選手名の記事が
+    既に投稿されていないかチェックする。
+
+    processed_urls.txt側のURL単位の重複排除（Google Newsデコード失敗対策・4-22）は、
+    「同じ記事が複数の検索クエリ経由で別URLに見える」ケースは防げても、「別々のメディアが
+    同じ実世界の移籍ニュースをそれぞれ別記事として報じる」ケースは防げない（2026/8/8調査・
+    4-26で判明。木村昇吾のクリケット転向が『ライブドアニュース』『広島ニュース 食べタインジャー』
+    の2媒体からそれぞれ正当な別URLとして投稿された）。これを防ぐため、選手名は完全一致ではなく
+    類似度で比較し、表記ゆれ（例：「アブラル・アフマド」/「アブラル・アフメド」）も吸収する。"""
+    if not player_name:
+        return False
+    cutoff = datetime.now(timezone.utc) - timedelta(days=DUPLICATE_TOPIC_WINDOW_DAYS)
+    for date, cat, name in recent_topics:
+        if cat != category or date < cutoff:
+            continue
+        ratio = difflib.SequenceMatcher(None, player_name, name).ratio()
+        if ratio >= PLAYER_NAME_SIMILARITY_THRESHOLD:
+            print(
+                f"[重複トピック判定] 直近{DUPLICATE_TOPIC_WINDOW_DAYS}日以内に類似選手名の記事を検知したためスキップします: "
+                f"「{player_name}」 ≈ 「{name}」（類似度{ratio:.2f}） / カテゴリ: {category}"
+            )
+            return True
+    return False
 
 
 def build_prompt(title, summary_text):
@@ -954,6 +1033,10 @@ def main():
     processed_normalized = {normalize_resolved_url(u) for u in processed_urls}
     print(f"現在の既読URL数: {len(processed_urls)}")
 
+    # 「カテゴリ＋選手名」ベースの重複トピック判定用データ（4-26参照）
+    recent_topics = prune_recent_topics(load_recent_topics())
+    print(f"直近{DUPLICATE_TOPIC_RETENTION_DAYS}日以内のトピック記録数: {len(recent_topics)}")
+
     urls_by_category = get_rss_urls_by_category()
     categories = list(urls_by_category.keys())
     # カテゴリの抽選順を毎回シャッフルする。サッカーはフィード・検索クエリ数が他競技より
@@ -1024,6 +1107,16 @@ def main():
                         processed_normalized.add(norm_resolved)
                     continue
 
+                if is_recent_duplicate_topic(category, player_name, recent_topics):
+                    save_processed_url(url)
+                    processed_urls.add(url)
+                    processed_normalized.add(normalize_resolved_url(url))
+                    if resolved_url != url:
+                        save_processed_url(resolved_url)
+                        processed_urls.add(resolved_url)
+                        processed_normalized.add(norm_resolved)
+                    continue
+
                 blog_body = build_blog_body(category, player_name, team_name, summary_lines, resolved_url)
 
                 success = send_to_blog(blog_title, blog_body, category, team_name=team_name, publish=True)
@@ -1031,6 +1124,8 @@ def main():
                     save_processed_url(url)
                     if resolved_url != url:
                         save_processed_url(resolved_url)
+                    if player_name:
+                        save_recent_topic(category, player_name)
                     print("1件の配信処理が正常終了したため、スクリプトを終了します。")
                     sys.exit(0)
                 else:
