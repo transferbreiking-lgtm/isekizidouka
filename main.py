@@ -683,16 +683,32 @@ CLICHE_WORDS = ["覚悟", "熱量", "悲願", "執念", "ロマン", "胸を打�
 
 def check_cliche_and_repetition(text):
     """紋切り型ワードの使用と、同一文内での単語重複（AI臭さの典型パターン）を検知してログに出す。
-    ブロッキングは行わない（ログ確認のみ）。"""
+    ブロッキングは行わない（ログ確認のみ）。
+    CATEGORY/PLAYER_NAME/TEAM_NAME等のラベル行は文章ではないため対象外とし、
+    TITLE・SUMMARYの実際の文章部分だけを検査する。"""
     if not text:
         return
 
-    hit_words = [w for w in CLICHE_WORDS if w in text]
+    prose_lines = []
+    is_summary = False
+    for line in text.split("\n"):
+        if line.startswith("TITLE:"):
+            prose_lines.append(line.replace("TITLE:", "").strip())
+        elif line.startswith("SUMMARY:"):
+            is_summary = True
+        elif is_summary and line.strip().startswith("・"):
+            prose_lines.append(line.strip().lstrip("・").strip())
+    prose_text = "。".join(prose_lines)
+
+    if not prose_text:
+        return
+
+    hit_words = [w for w in CLICHE_WORDS if w in prose_text]
     if hit_words:
         print(f"[表現チェック] 使用禁止ワードが出力に含まれています（プロンプト遵守漏れの可能性）: {hit_words}")
 
     # 「。」「！」「？」で文を区切り、各文の中で4文字以上の語が連続していないか簡易チェック
-    for sentence in re.split(r"[。！？]", text):
+    for sentence in re.split(r"[。！？]", prose_text):
         words = re.findall(r"[ぁ-んァ-ヶ一-龠a-zA-Z]{4,}", sentence)
         seen = set()
         for w in words:
