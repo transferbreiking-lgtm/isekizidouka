@@ -1,3 +1,0 @@
-# TransferBreaking
-User-agent: *
-Allow: /
