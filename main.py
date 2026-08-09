@@ -247,6 +247,10 @@ DUPLICATE_TOPIC_RETENTION_DAYS = 10
 # 選手名の表記ゆれ（例：「アブラル・アフマド」/「アブラル・アフメド」）を吸収するための類似度しきい値
 PLAYER_NAME_SIMILARITY_THRESHOLD = 0.75
 
+# 「噂→公式発表」等、確度が上がった続報を検知した際に新規投稿ではなく既存記事をPUT更新するための
+# 確度ランク（数字が大きいほど確度が高い）。4-30のSUMMARY1行目ラベル【○○の現地報道】等から判定する。
+CONFIDENCE_RANK = {"UNKNOWN": 0, "RUMOR": 1, "LOCAL_REPORT": 2, "OFFICIAL": 3}
+
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")  # フォールバック用（無料枠）
 LIVEDOOR_BLOG_ID = os.environ.get("LIVEDOOR_BLOG_ID")
@@ -568,22 +572,36 @@ def save_processed_url(url):
 
 
 def load_recent_topics():
-    """recent_topics.txt（日付|カテゴリ|選手名）を読み込み、リストで返す"""
+    """recent_topics.txt（日付|カテゴリ|選手名|確度|記事ID）を読み込み、リストで返す。
+
+    確度・記事ID列は6章11番（噂→公式発表への記事アップデート機構）で追加したもの。
+    それ以前に書かれた旧形式（日付|カテゴリ|選手名の3フィールド）の行も引き続き読めるよう、
+    確度=UNKNOWN・記事ID=Noneで補完する後方互換を維持する。"""
     if not os.path.exists(RECENT_TOPICS_FILE):
         return []
     topics = []
     with open(RECENT_TOPICS_FILE, "r", encoding="utf-8") as f:
         for line in f:
-            parts = line.strip().split("|", 2)
-            if len(parts) != 3:
+            parts = line.strip().split("|")
+            if len(parts) not in (3, 5):
                 continue
-            date_str, category, player_name = parts
+            date_str, category, player_name = parts[0], parts[1], parts[2]
+            if len(parts) == 5:
+                confidence, article_id = parts[3], (parts[4] or None)
+            else:
+                confidence, article_id = "UNKNOWN", None
             try:
                 date = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
             except ValueError:
                 continue
-            topics.append((date, category, player_name))
+            topics.append((date, category, player_name, confidence, article_id))
     return topics
+
+
+def _write_recent_topics(topics):
+    with open(RECENT_TOPICS_FILE, "w", encoding="utf-8") as f:
+        for date, category, player_name, confidence, article_id in topics:
+            f.write(f"{date.strftime('%Y-%m-%d')}|{category}|{player_name}|{confidence}|{article_id or ''}\n")
 
 
 def prune_recent_topics(topics):
@@ -592,22 +610,31 @@ def prune_recent_topics(topics):
     cutoff = datetime.now(timezone.utc) - timedelta(days=DUPLICATE_TOPIC_RETENTION_DAYS)
     kept = [t for t in topics if t[0] >= cutoff]
     if len(kept) != len(topics):
-        with open(RECENT_TOPICS_FILE, "w", encoding="utf-8") as f:
-            for date, category, player_name in kept:
-                f.write(f"{date.strftime('%Y-%m-%d')}|{category}|{player_name}\n")
+        _write_recent_topics(kept)
     return kept
 
 
-def save_recent_topic(category, player_name):
-    """投稿成功時に「カテゴリ＋選手名」を記録する（重複トピック判定用）"""
+def save_recent_topic(category, player_name, confidence="UNKNOWN", article_id=None):
+    """投稿成功時に「カテゴリ＋選手名＋確度＋記事ID」を記録する（重複トピック判定・記事アップデート判定用）"""
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     with open(RECENT_TOPICS_FILE, "a", encoding="utf-8") as f:
-        f.write(f"{today}|{category}|{player_name}\n")
+        f.write(f"{today}|{category}|{player_name}|{confidence}|{article_id or ''}\n")
 
 
-def is_recent_duplicate_topic(category, player_name, recent_topics):
+def update_recent_topic_record(old_record, category, player_name, confidence, article_id):
+    """記事アップデート成功時、既存レコードを新しい確度で書き換える（記事IDは変わらないため維持）。
+    recent_topics.txt全体を読み直し、該当レコードだけ置き換えてファイルを書き直す。"""
+    topics = load_recent_topics()
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    new_record = (today, category, player_name, confidence, article_id)
+    rewritten = [new_record if t == old_record else t for t in topics]
+    _write_recent_topics(rewritten)
+
+
+def find_recent_duplicate_topic(category, player_name, recent_topics):
     """同一カテゴリで、直近DUPLICATE_TOPIC_WINDOW_DAYS日以内に類似した選手名の記事が
-    既に投稿されていないかチェックする。
+    既に投稿されていないかチェックし、一致したレコード（date, category, player_name, confidence, article_id）
+    を返す。一致が無ければNoneを返す。
 
     processed_urls.txt側のURL単位の重複排除（Google Newsデコード失敗対策・4-22）は、
     「同じ記事が複数の検索クエリ経由で別URLに見える」ケースは防げても、「別々のメディアが
@@ -616,19 +643,20 @@ def is_recent_duplicate_topic(category, player_name, recent_topics):
     の2媒体からそれぞれ正当な別URLとして投稿された）。これを防ぐため、選手名は完全一致ではなく
     類似度で比較し、表記ゆれ（例：「アブラル・アフマド」/「アブラル・アフメド」）も吸収する。"""
     if not player_name:
-        return False
+        return None
     cutoff = datetime.now(timezone.utc) - timedelta(days=DUPLICATE_TOPIC_WINDOW_DAYS)
-    for date, cat, name in recent_topics:
+    for record in recent_topics:
+        date, cat, name = record[0], record[1], record[2]
         if cat != category or date < cutoff:
             continue
         ratio = difflib.SequenceMatcher(None, player_name, name).ratio()
         if ratio >= PLAYER_NAME_SIMILARITY_THRESHOLD:
             print(
-                f"[重複トピック判定] 直近{DUPLICATE_TOPIC_WINDOW_DAYS}日以内に類似選手名の記事を検知したためスキップします: "
+                f"[重複トピック判定] 直近{DUPLICATE_TOPIC_WINDOW_DAYS}日以内に類似選手名の記事を検知しました: "
                 f"「{player_name}」 ≈ 「{name}」（類似度{ratio:.2f}） / カテゴリ: {category}"
             )
-            return True
-    return False
+            return record
+    return None
 
 
 def build_prompt(title, summary_text):
@@ -859,6 +887,24 @@ def parse_ai_output(output_text):
     return category, player_name, team_name, title, summary_lines
 
 
+def extract_confidence_level(summary_lines):
+    """SUMMARY1行目の【○○の現地報道】等のラベル（4-30参照）から情報の確度を判定する。
+    プロンプト・出力フォーマット自体は変更せず、既存の自由文ラベルをキーワードで分類するのみ。
+    「公式発表」→「現地報道・関係者」→「噂・可能性」の順でチェックし、いずれにも該当しなければ
+    UNKNOWN（6章11番の記事アップデート機構では、確度不明のレコードは更新対象にしない安全側の扱い）。"""
+    if not summary_lines:
+        return "UNKNOWN"
+    match = re.match(r"^【(.+?)】", summary_lines[0])
+    label = match.group(1) if match else ""
+    if "公式発表" in label:
+        return "OFFICIAL"
+    if "現地報道" in label or "関係者" in label:
+        return "LOCAL_REPORT"
+    if "噂" in label or "可能性" in label:
+        return "RUMOR"
+    return "UNKNOWN"
+
+
 def build_team_archive_url(team_name):
     """チーム名からカテゴリアーカイブページのURLを組み立てる（category/{チーム名}形式）"""
     encoded_team = urllib.parse.quote(team_name)
@@ -956,8 +1002,8 @@ def build_blog_body(category, player_name, team_name, summary_lines, source_url)
     return compact_html_for_description(blog_body)
 
 
-def send_to_blog(subject, body_html, category, team_name=None, publish=True):
-    """AtomPub APIを使ってライブドアブログへ記事を投稿する
+def _build_atompub_entry_xml(subject, body_html, category, team_name=None, publish=True):
+    """AtomPub投稿・更新（send_to_blog/update_blog_article）で共用するentry XMLを組み立てる
 
     category      : main.py内のカテゴリコード（例: "SOCCER"）。CATEGORY_LABELSで日本語ラベルに変換して送信する。
                      ライブドア側に同名カテゴリが無ければ自動で新規作成される。
@@ -967,10 +1013,6 @@ def send_to_blog(subject, body_html, category, team_name=None, publish=True):
     publish=True  : 即時公開
     publish=False : 下書き保存（動作確認したいときに使用）
     """
-    if not all([LIVEDOOR_BLOG_ID, LIVEDOOR_API_KEY]):
-        print("エラー: 投稿に必要な環境変数(LIVEDOOR_BLOG_ID / LIVEDOOR_API_KEY)が設定されていません。")
-        return False
-
     entry = ET.Element("entry", attrib={
         "xmlns": "http://www.w3.org/2005/Atom",
         "xmlns:app": "http://www.w3.org/2007/app",
@@ -1000,8 +1042,22 @@ def send_to_blog(subject, body_html, category, team_name=None, publish=True):
     app_draft = ET.SubElement(app_control, "app:draft")
     app_draft.text = "no" if publish else "yes"
 
-    xml_body = '<?xml version="1.0" encoding="utf-8"?>\n' + ET.tostring(entry, encoding="unicode")
+    return '<?xml version="1.0" encoding="utf-8"?>\n' + ET.tostring(entry, encoding="unicode")
 
+
+def send_to_blog(subject, body_html, category, team_name=None, publish=True):
+    """AtomPub APIを使ってライブドアブログへ記事を新規投稿する。
+
+    戻り値は (成功したか, 記事ID) のタプル。記事IDはPOSTレスポンスのLocationヘッダー
+    （例: https://livedoor.blogcms.jp/atompub/{BLOG_ID}/article/1234567）から抽出したもので、
+    6章11番の記事アップデート機構（update_blog_article）で後から本文を書き換える際に使う。
+    抽出できなかった場合はNoneを返す（その場合、後続の記事アップデートは行われず通常のスキップ扱いになる）。
+    """
+    if not all([LIVEDOOR_BLOG_ID, LIVEDOOR_API_KEY]):
+        print("エラー: 投稿に必要な環境変数(LIVEDOOR_BLOG_ID / LIVEDOOR_API_KEY)が設定されていません。")
+        return False, None
+
+    xml_body = _build_atompub_entry_xml(subject, body_html, category, team_name, publish)
     endpoint = f"https://livedoor.blogcms.jp/atompub/{LIVEDOOR_BLOG_ID}/article"
     headers = {"Content-Type": "application/atom+xml;type=entry;charset=utf-8"}
 
@@ -1015,11 +1071,49 @@ def send_to_blog(subject, body_html, category, team_name=None, publish=True):
         )
         if response.status_code == 201:
             print(f"ブログへの投稿に成功しました: {subject}")
-            return True
+            article_id = None
+            match = re.search(r"/article/(\d+)", response.headers.get("Location", ""))
+            if match:
+                article_id = match.group(1)
+            return True, article_id
         print(f"投稿に失敗しました。ステータスコード: {response.status_code} / レスポンス: {response.text[:300]}")
-        return False
+        return False, None
     except Exception as e:
         print(f"AtomPub API 実行エラー: {e}")
+        return False, None
+
+
+def update_blog_article(article_id, subject, body_html, category, team_name=None):
+    """AtomPub APIのPUTで既存記事を更新する（6章11番：噂→公式発表への記事アップデート機構）。
+
+    続報で情報の確度が上がった（例：現地報道→公式発表）場合、二重投稿を避けるため新規記事は
+    作らず、既存記事のタイトル・本文・カテゴリを書き換える。ライブドアのAtomPub APIは
+    PUT https://livedoor.blogcms.jp/atompub/{BLOG_ID}/article/{記事ID} で更新に対応しており、
+    記事IDはPOST時のLocationヘッダーから取得したものをrecent_topics.txtに保存して再利用する。
+    """
+    if not all([LIVEDOOR_BLOG_ID, LIVEDOOR_API_KEY]):
+        print("エラー: 更新に必要な環境変数(LIVEDOOR_BLOG_ID / LIVEDOOR_API_KEY)が設定されていません。")
+        return False
+
+    xml_body = _build_atompub_entry_xml(subject, body_html, category, team_name, publish=True)
+    endpoint = f"https://livedoor.blogcms.jp/atompub/{LIVEDOOR_BLOG_ID}/article/{article_id}"
+    headers = {"Content-Type": "application/atom+xml;type=entry;charset=utf-8"}
+
+    try:
+        response = requests.put(
+            endpoint,
+            data=xml_body.encode("utf-8"),
+            headers=headers,
+            auth=HTTPBasicAuth(LIVEDOOR_BLOG_ID, LIVEDOOR_API_KEY),
+            timeout=30,
+        )
+        if response.status_code in (200, 204):
+            print(f"記事の更新に成功しました（記事ID: {article_id}）: {subject}")
+            return True
+        print(f"記事の更新に失敗しました。記事ID: {article_id} / ステータスコード: {response.status_code} / レスポンス: {response.text[:300]}")
+        return False
+    except Exception as e:
+        print(f"AtomPub API（更新）実行エラー: {e}")
         return False
 
 
@@ -1107,7 +1201,29 @@ def main():
                         processed_normalized.add(norm_resolved)
                     continue
 
-                if is_recent_duplicate_topic(category, player_name, recent_topics):
+                matched_topic = find_recent_duplicate_topic(category, player_name, recent_topics)
+                if matched_topic:
+                    old_date, old_category, old_player_name, old_confidence, old_article_id = matched_topic
+                    new_confidence = extract_confidence_level(summary_lines)
+                    can_update = (
+                        old_article_id
+                        and CONFIDENCE_RANK.get(old_confidence, 0) > 0
+                        and CONFIDENCE_RANK.get(new_confidence, 0) > CONFIDENCE_RANK.get(old_confidence, 0)
+                    )
+                    if can_update:
+                        blog_body = build_blog_body(category, player_name, team_name, summary_lines, resolved_url)
+                        if update_blog_article(old_article_id, blog_title, blog_body, category, team_name=team_name):
+                            update_recent_topic_record(matched_topic, category, player_name, new_confidence, old_article_id)
+                            print(
+                                f"[記事アップデート] 確度が {old_confidence}→{new_confidence} に上がったため、"
+                                f"新規投稿せず記事ID {old_article_id} を更新しました: {blog_title}"
+                            )
+                            save_processed_url(url)
+                            if resolved_url != url:
+                                save_processed_url(resolved_url)
+                            print("1件の配信処理が正常終了したため、スクリプトを終了します。")
+                            sys.exit(0)
+                        print("記事アップデートに失敗したため、このURLは既読化してスキップします（新規投稿はしません）。")
                     save_processed_url(url)
                     processed_urls.add(url)
                     processed_normalized.add(normalize_resolved_url(url))
@@ -1119,13 +1235,13 @@ def main():
 
                 blog_body = build_blog_body(category, player_name, team_name, summary_lines, resolved_url)
 
-                success = send_to_blog(blog_title, blog_body, category, team_name=team_name, publish=True)
+                success, article_id = send_to_blog(blog_title, blog_body, category, team_name=team_name, publish=True)
                 if success:
                     save_processed_url(url)
                     if resolved_url != url:
                         save_processed_url(resolved_url)
                     if player_name:
-                        save_recent_topic(category, player_name)
+                        save_recent_topic(category, player_name, extract_confidence_level(summary_lines), article_id)
                     print("1件の配信処理が正常終了したため、スクリプトを終了します。")
                     sys.exit(0)
                 else:
