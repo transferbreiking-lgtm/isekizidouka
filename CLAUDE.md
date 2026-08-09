@@ -201,6 +201,16 @@ livedoor_monthly_archive.html          # 月別アーカイブテンプレート
 - **結論**：2019年12月のGoogle側の仕様変更（手動申請制→ガイドライン準拠なら自動掲載制）に伴い、少なくともこのアカウント種別では「Googleニュースへの個別申請」という工程自体がPublisher Center上から無くなっていると考えられる。**Publisher Center側でやるべきことは、今回入力した基本プロフィール情報（全般・URL・連絡先・ビジュアルスタイル）を整える所までで完了**。あとは通常のGoogle検索クロール・Googleニュースのガイドライン適合評価に委ねる形になる。
 - **次回確認事項**：数週間〜数ヶ月後、GSCの「検索パフォーマンス」でGoogleニュース経由の表示・流入が発生しているか定点観測する（6章の次にやることリストに反映済み）。ビジュアルスタイルのロゴアップロードが完了しているかも次回確認。
 
+### 4-38. D1_INGEST_SECRETの削除・cloudflare/フォルダの削除（TransferChronicleは別リポジトリで新規構築する方針を確定）（2026/8/9）
+
+- 4-23で積み残していた2つの未対応事項について、本人と協議の上で対応を確定・実施。
+- **`D1_INGEST_SECRET`（GitHub Secrets）**：4-24でTransferBreaking本体のD1連携（`post_to_d1()`等）を巻き戻した際、コード側の参照は全て削除済みだったが、GitHub Secrets自体は削除し忘れて放置されていた。`main.py`・`.github/workflows/main.yml`に参照が一切無いことを再確認した上で、GitHub REST API（本人発行のClassic PATで認証）経由で削除済み（`DELETE /repos/{owner}/{repo}/actions/secrets/D1_INGEST_SECRET` → 204）。
+- **`cloudflare/`フォルダ（リポジトリ直下）**：中身を確認したところ、`wrangler.toml`のプロジェクト名が`transferbreaking`、D1データベース名が`transferbreaking-db`、`_shared/config.ts`のサムネイル画像がLivedoorの`transfer_breiking`アカウント直リンク、カテゴリラベルも4-24でESPORTSへ改名する前の`OTHER`のままと、**完全にTransferBreakingブランド専用かつ本体main.pyの現状（ESPORTS等）から乖離した状態**で放置されていたことが判明。加えて4-23の通りCloudflare Pages「transferbreaking」プロジェクトとこのリポジトリはGit連携済み・自動デプロイ有効のままだったため、**このリポジトリへpushするたびに古いコードがCloudflare側へ再デプロイされ続けていた**。
+- **本人判断（2026/8/9）**：TransferBreaking（Livedoor）はこのまま単独運用を継続。TransferChronicle（4-24で構想したCloudflare Pages/D1版の派生サイト）は、このリポジトリの`cloudflare/`フォルダを流用・書き換えるのではなく、**別の新規GitHubリポジトリとして一から構築する**方針で確定。理由：`cloudflare/`の中身がTransferBreaking専用設定に深く紐づいており流用価値が低いこと、また2サイト（Livedoor版・Cloudflare版）を同一リポジトリに同居させ続けるより分離した方が今後の運用がシンプルになるため。
+- 上記方針に基づき、`cloudflare/`フォルダ（`functions/`一式・`schema.sql`・`wrangler.toml`等9ファイル）をこのリポジトリから削除（コミット`0fe9b2d`）。GitHubへpush済み。
+- **⚠️ 未対応（本人作業が必要）**：Cloudflareダッシュボード（`dash.cloudflare.com`）側で、Pagesプロジェクト「transferbreaking」のGit連携を手動で解除、または同プロジェクト自体を削除すること。このセッションではCloudflare側のAPI認証情報が無く代理実行できなかった。連携を解除しない限り、Pagesプロジェクトは「`cloudflare/`フォルダが存在しないリポジトリ」を参照し続ける状態になり、次回以降のデプロイが失敗する（実害は無いが放置すると紛らわしい）。
+- TransferChronicle着手時は、新規リポジトリでゼロから設計し直す（D1スキーマ・カテゴリ構成・ブランディング等は本サイトの現行`main.py`の内容を参照しつつ、TransferChronicle独自の要件に合わせて再定義する）。
+
 ## 5. ライブドアブログ側の設定（デザイン設定 → デザイン／ブログパーツ設定 → PC → カスタマイズ）
 
 | タブ | ファイル |
