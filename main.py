@@ -394,6 +394,24 @@ GOODS_AFFILIATE_ADS = [
     },
 ]
 
+# カテゴリ専門のA8.net案件（2026/8/17提携確認済み）。GOODS_AFFILIATE_ADSの総合スポーツ用品店と違い、
+# 特定競技にしか関係が無い専門店のため、対応カテゴリの記事にのみ表示する（無関係なカテゴリの記事に
+# ランダム表示される事故を防ぐ設計。build_goods_ad_html()参照）。
+# ※ PLUSTEE GOLF ONLINE（ゴルフティー）・トレック（ロードバイク）も同時に提携確認できているが、
+#   ゴルフ・自転車競技はTransferBreakingの13カテゴリに存在しないため、対応カテゴリが決まるまで
+#   このリストには含めていない（本人と協議の上、今回は保留と決定）。
+CATEGORY_GOODS_ADS = {
+    "ICE_HOCKEY": [
+        {
+            "name": "Victoria",
+            "html": (
+                '<a href="https://px.a8.net/svt/ejp?a8mat=4BA7X7+A4Z0MY+4ABU+NTRMQ" target="_blank" rel="nofollow noopener">マリン・ウィンタースポーツ用品ならVictoria</a>'
+                '<img border="0" width="1" height="1" src="https://www11.a8.net/0.gif?a8mat=4BA7X7+A4Z0MY+4ABU+NTRMQ" alt="">'
+            ),
+        },
+    ],
+}
+
 # team_nameが完全一致した場合に優先表示する「その対象そのものの商品」へのA8.net商品リンク
 # （楽天商品リンク検索・Amazon商品リンク検索から個別に手動生成したもの）。
 # GOODS_AFFILIATE_ADS（総合スポーツ用品店のトップページリンク）より、記事内容と直結した
@@ -979,13 +997,23 @@ def build_team_archive_url(team_name):
 
 
 def build_goods_ad_html(category, player_name, team_name):
-    """物販系のA8.net広告を1件選んで埋め込む。
-    team_nameがTEAM_GOODS_ADSに完全一致する場合は、その対象そのものの具体的な商品リンク
-    （例：日本代表記事→日本代表ユニフォーム）を優先表示する。記事内容と直結した商品の方が
-    総合スポーツ用品店のトップページリンクよりCVRが高いため。該当が無ければGOODS_AFFILIATE_ADS
-    （総合スポーツ用品店）にフォールバックし、team_name/player_nameを使った訴求文を添える。"""
+    """物販系のA8.net広告を1件選んで埋め込む。優先順位は以下の3段階：
+    1. team_nameがTEAM_GOODS_ADSに完全一致する場合は、その対象そのものの具体的な商品リンク
+       （例：日本代表記事→日本代表ユニフォーム）を優先表示する。記事内容と直結した商品の方が
+       総合スポーツ用品店のトップページリンクよりCVRが高いため。
+    2. categoryがCATEGORY_GOODS_ADSに存在する場合、その競技専門店を表示する
+       （例：アイスホッケー記事→ウィンタースポーツ用品店）。GOODS_AFFILIATE_ADS（総合スポーツ用品店）
+       と違い、対応カテゴリが無い専門店（ゴルフ・自転車等、TransferBreakingが扱っていない競技）を
+       無関係なカテゴリの記事にランダム表示してしまう事故を防ぐため、辞書に無いカテゴリでは使わない
+       設計にしている（2026/8/17）。
+    3. どちらにも該当しなければGOODS_AFFILIATE_ADS（総合スポーツ用品店）にフォールバックし、
+       team_name/player_nameを使った訴求文を添える。"""
     if team_name and team_name in TEAM_GOODS_ADS:
         return random.choice(TEAM_GOODS_ADS[team_name])
+
+    if category in CATEGORY_GOODS_ADS:
+        ad = random.choice(CATEGORY_GOODS_ADS[category])
+        return ad["html"]
 
     ad = random.choice(GOODS_AFFILIATE_ADS)
     if team_name:
