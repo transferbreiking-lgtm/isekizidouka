@@ -150,20 +150,30 @@ body {
     margin-bottom: 0;
 }
 .popularArticleWithImage a {
+    /* バナー画像（上）＋タイトル（下）のカード型に変更（2026/8/17）。
+       横並び（画像小＋縦長テキスト）だとバランスが悪いという指摘を受けての修正。
+       画像はLivedoor側がインラインstyleでwidth/height/border-colorを直接指定してくるため
+       !importantで上書きする必要がある。 */
     display: flex !important;
-    align-items: flex-start;
-    gap: 10px;
-    width: auto !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px;
+    width: 100% !important;
     height: auto !important;
     text-decoration: none;
+    border: none !important; /* Livedoorデフォルトの3px黒枠を除去（サイトの配色から浮くため） */
 }
 .popularArticleWithImage .image {
     position: static !important;
-    flex-shrink: 0;
+    width: 100% !important;
+    height: auto !important;
 }
 .popularArticleWithImage .image img {
     display: block;
+    width: 100% !important;
+    height: auto !important;
     border-radius: 2px;
+    border: 1px solid var(--line-dark);
 }
 .popularArticleWithImage .title {
     /* 3行で切り詰めるwebkit-line-clampハックはブラウザによって適用が不安定で、
