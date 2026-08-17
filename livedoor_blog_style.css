@@ -132,6 +132,75 @@ body {
     padding: 8px 2px;
 }
 
+/* 人気記事（画像付き）ウィジェット（<$PopularArticlesWithImageList$>）のスタイル上書き。
+   Livedoor側のデフォルトは、タイトルを画像に重ねた高さ11px程度・半透明の帯として表示する
+   ホバー時キャプション風の設計になっており、常時ではタイトル文字がほぼ潰れて読めない状態
+   だった（2026/8/17に実機確認して判明）。サムネイル横にタイトルを常時表示する通常のリスト形式に
+   上書きする。Livedoor側がインラインstyleで幅・高さ・位置を直接指定してくるため、!importantで
+   上書きする必要がある。 */
+.popularArticlesWithImage ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.popularArticleWithImage {
+    margin-bottom: 12px;
+}
+.popularArticleWithImage:last-child {
+    margin-bottom: 0;
+}
+.popularArticleWithImage a {
+    display: flex !important;
+    align-items: flex-start;
+    gap: 10px;
+    width: auto !important;
+    height: auto !important;
+    text-decoration: none;
+}
+.popularArticleWithImage .image {
+    position: static !important;
+    flex-shrink: 0;
+}
+.popularArticleWithImage .image img {
+    display: block;
+    border-radius: 2px;
+}
+.popularArticleWithImage .title {
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    max-height: none !important;
+    opacity: 1 !important;
+    color: var(--text-main) !important;
+    background-color: transparent !important;
+    font-size: 12px;
+    line-height: 1.4;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden !important;
+}
+
+/* サイドバーAD枠。記事下部の.ad-sectionと同じトーンで、サイドバーの実効ボリュームを
+   底上げしつつ収益導線も1本増やす（2026/8/17）。 */
+.sidebar-ad-caption {
+    font-size: 10px;
+    color: var(--text-sub);
+    letter-spacing: 0.2em;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+}
+.sidebar-ad-link {
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 800;
+    color: #ffffff;
+    text-decoration: none;
+    border-bottom: 2px solid var(--accent-red);
+    padding-bottom: 2px;
+    line-height: 1.5;
+}
+
 /* スマホ幅ではサイドバーを本文の下に回す（横幅が足りないため） */
 @media (max-width: 680px) {
     .page-layout {
