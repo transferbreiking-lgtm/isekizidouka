@@ -263,6 +263,18 @@ livedoor_monthly_archive.html          # 月別アーカイブテンプレート
 - **本人作業が必要**：`livedoor_article_page.html`の修正をライブドア管理画面（デザイン設定→デザイン／ブログパーツ設定→PC→カスタマイズ→個別記事ページ）に貼り直すこと。反映後、[Rich Results Test](https://search.google.com/test/rich-results)で`datePublished`がISO 8601形式で正しく認識されるか実機確認を推奨。
 - **過去記事データの扱い（4-43から継続保留）**：`articles_log.jsonl`は2026/8/17以降の投稿からしか記録されない。過去分をスクレイピングで復元するかは、本人がTransferChronicle着手時に判断する方針のまま。
 
+### 4-45. 過去記事バックフィルスクリプト`backfill_articles_log.py`を新規作成（2026/8/17）
+
+- 4-44で「Chronicle着手を待っても、スクレイピング対象（2026/8/17より前の記事、約2,000件超）は増えない」ことを説明したところ、本人より「早めに作っておこう」との判断。`backfill_team_categories.py`と同じAtomPub全件取得パターン（`fetch_all_entries()`、`rel="next"`でのページング）を再利用し、過去記事を`articles_log.jsonl`と同一スキーマでバックフィルする専用スクリプト[backfill_articles_log.py](backfill_articles_log.py)を新規作成した。
+- **復元できる項目**：`article_id`／`permalink`／`category`（サムネイルのalt属性 or 1つ目の`<category>`タグから逆引き）／`team_name`（2つ目の`<category>`タグ）／`title`／`summary_lines`（本文の`<li>`要素）／`source_url`（本文末尾の「情報元」リンクを正規表現抽出）／`confidence`（main.pyの`extract_confidence_level()`をsummary_linesに適用して推定）／元記事の投稿日時（`atom:published`）。
+- **復元できない項目**：`player_name`。記事HTML上に独立したフィールドとして残っておらず機械的な確実な抽出ができないため、バックフィル分は`null`のまま出力する（Chronicle側で必要ならtitle/summary_linesのテキストから別途NLP/AI抽出する想定）。AI呼び出しは一切行わない設計のため、無料枠を消費せず何度でも安全に再実行できる。
+- `action`フィールドを`"backfilled"`とし、main.py本体が書き込む`"created"`/`"updated"`と区別できるようにした。実行前に`articles_log.jsonl`の既存`article_id`を読み込み、重複する記事は自動スキップする（何度でも再実行可能・冪等）。
+- ローカルで疑似的なAtomPub `<entry>` XML（本文HTML・カテゴリタグ2つ・出典リンク付き）を使い、`article_id`／`category`逆引き／`team_name`／`source_url`／`confidence`推定／重複スキップの各ロジックを検証済み（`py_compile`構文チェックも実施済み）。**実際のLivedoor AtomPub APIに対する本番実行は、このセッションの環境にLIVEDOOR_API_KEY等が無いため未実施**（GitHub Secretsのみに存在し、ローカルには無い）。
+- **本人作業が必要（実行手順）**：
+  1. まず`DRY_RUN`（デフォルト）で対象記事数を確認：`python backfill_articles_log.py`（LIVEDOOR_BLOG_ID/LIVEDOOR_API_KEYの環境変数が必要、`backfill_team_categories.py`と同じ実行要領）
+  2. 問題なければ本番実行：`DRY_RUN=false python backfill_articles_log.py`
+  3. 実行後、`articles_log.jsonl`に`"action": "backfilled"`のレコードが約2,000件超追加されていることを確認し、GitHubへコミット・プッシュすること（GitHub Actionsの自動コミットとは別に、手動実行分は本人が明示的にコミットする必要がある）
+
 ## 5. ライブドアブログ側の設定（デザイン設定 → デザイン／ブログパーツ設定 → PC → カスタマイズ）
 
 | タブ | ファイル |
