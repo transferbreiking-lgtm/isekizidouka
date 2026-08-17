@@ -255,6 +255,14 @@ livedoor_monthly_archive.html          # 月別アーカイブテンプレート
   - カテゴリアーカイブページのmeta descriptionは「監査中に一度WebFetchの要約で『無い』と誤検知したが、生HTML（`curl`）で再確認したところ実際には実装済みだった」ことが判明。WebFetchはmarkdown変換時に`<head>`タグ内容を省略する場合があるため、今後同様の技術SEO調査では**生HTML（`curl`）での裏取りを必須とする**教訓を得た。
 - **未検証・次回確認事項**：本番のGitHub Actions実行で`articles_log.jsonl`が実際に想定通り追記され、コミット・プッシュされるか（次回投稿後にリポジトリの当該ファイルを確認すること）。過去（2026/8/17以前）に投稿済みの記事分については、この永続ログには載らないため、TransferChronicle側でその期間のデータをどう扱うか（スクレイピングで復元する／Chronicle開始日以降のみで運用する）は本人判断が必要な積み残し事項として残る。
 
+### 4-44. 4-43で洗い出した残り2項目の解消・robots.txt問題は「対応不要」と判明（2026/8/17）
+
+- **NewsArticleのJSON-LD日付問題を根本解決**：Web調査により、Livedoorに`<$ArticleDateISO8601$>`という**ISO 8601形式（例：`2026-08-09T10:15:17+09:00`）を直接出力する公式テンプレートタグが存在する**ことが判明（`<$ArticleDate$>`しか無いという4-19時点の前提が誤りだった）。`livedoor_article_page.html`のJSON-LD内`datePublished`/`dateModified`を`<$ArticleDate$>`→`<$ArticleDateISO8601$>`に差し替え、4-19で実装していたクライアントサイドJSでの日付補正処理（`.story-date`のテキストをパースしてJSON-LDを書き換えるコード）を完全に削除。サーバー側（Livedoorのタグ展開時点）で正しい形式が出力されるため、JS実行タイミングに依存するクロールリスクは解消。
+  - **既知の制限**：Livedoorには`dateModified`専用のタグ（更新日時）が見当たらなかったため、`dateModified`も同じ`<$ArticleDateISO8601$>`（＝投稿日時）を使っている。4-34の記事アップデート機構で本文が更新されても、この値自体は変わらない（Livedoor側に更新日時タグが存在しない制約によるもの。実害は小さいと判断し許容）。
+- **robots.txt 404問題は「対応不要」と結論**：`https://transferbreaking.officialblog.jp/robots.txt`が404を返す件は、完全カスタムHTML編集モードではルート直下への任意ファイル設置ができないLivedoorの仕様上の制約であり、bloggerの手で修正不可能と判断。加えて、robots.txtが存在しないことは「クロール制限が一切無い」ことを意味し、全記事をインデックスさせたい公開ニュースサイトの方針にはむしろ合致するため、実質的な問題ではないと結論づけてクローズした。
+- **本人作業が必要**：`livedoor_article_page.html`の修正をライブドア管理画面（デザイン設定→デザイン／ブログパーツ設定→PC→カスタマイズ→個別記事ページ）に貼り直すこと。反映後、[Rich Results Test](https://search.google.com/test/rich-results)で`datePublished`がISO 8601形式で正しく認識されるか実機確認を推奨。
+- **過去記事データの扱い（4-43から継続保留）**：`articles_log.jsonl`は2026/8/17以降の投稿からしか記録されない。過去分をスクレイピングで復元するかは、本人がTransferChronicle着手時に判断する方針のまま。
+
 ## 5. ライブドアブログ側の設定（デザイン設定 → デザイン／ブログパーツ設定 → PC → カスタマイズ）
 
 | タブ | ファイル |
