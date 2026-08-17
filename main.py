@@ -247,6 +247,13 @@ DUPLICATE_TOPIC_RETENTION_DAYS = 10
 # 選手名の表記ゆれ（例：「アブラル・アフマド」/「アブラル・アフメド」）を吸収するための類似度しきい値
 PLAYER_NAME_SIMILARITY_THRESHOLD = 0.75
 
+# RSS/Google Newsエントリの鮮度フィルタ。main()側は従来「そのURLが既読か」だけで新規記事を
+# 判定しており、記事の公開日を一切見ていなかった。Google Newsのキーワード検索は新着順ではなく
+# 関連度順で結果を返すため、これより古い記事（数ヶ月〜1年以上前のイベント記事等）が無条件で
+# 「新規記事」として処理されてしまう問題が判明した（2026/8/17）。公開日が取得できたエントリのみ、
+# これより古ければ巡回対象から除外する（公開日が取得できない場合は従来通り処理する＝取りこぼし防止）。
+ARTICLE_MAX_AGE_DAYS = 10
+
 # 「噂→公式発表」等、確度が上がった続報を検知した際に新規投稿ではなく既存記事をPUT更新するための
 # 確度ランク（数字が大きいほど確度が高い）。4-30のSUMMARY1行目ラベル【○○の現地報道】等から判定する。
 CONFIDENCE_RANK = {"UNKNOWN": 0, "RUMOR": 1, "LOCAL_REPORT": 2, "OFFICIAL": 3}
@@ -478,9 +485,24 @@ SOURCE_SITE_NAMES = {
 # -----------------------------------------------------------------------------
 # 2. 各種処理を行う関数群
 # -----------------------------------------------------------------------------
+# Google Newsのキーワード検索は「新着順」ではなく「関連度順」で結果を返すため、
+# ニュース記事ではないページ（百科事典・SNS投稿等）も紛れ込みやすい。検索クエリ側で除外する
+# ドメインをここにまとめておく（2026/8/17、WRESTLINGの「ROH プロレス 契約」クエリで
+# Wikipedia・百度百科・x.com等が大量に混入していたことが判明したための対策）。
+GOOGLE_NEWS_EXCLUDED_DOMAINS = [
+    "wikipedia.org",
+    "baike.baidu.com",
+    "x.com",
+    "twitter.com",
+    "note.com",
+]
+
+
 def build_google_news_rss(query, hl="ja", gl="JP"):
     """キーワードをGoogle Newsの検索RSS URLに変換する（hl/glで検索対象の言語圏を切り替え可能）"""
-    encoded_query = urllib.parse.quote_plus(query)
+    exclusions = " ".join(f"-site:{domain}" for domain in GOOGLE_NEWS_EXCLUDED_DOMAINS)
+    full_query = f"{query} {exclusions}"
+    encoded_query = urllib.parse.quote_plus(full_query)
     ceid = f"{gl}:{hl}"
     return f"https://news.google.com/rss/search?q={encoded_query}&hl={hl}&gl={gl}&ceid={ceid}"
 
@@ -540,6 +562,20 @@ def resolve_article_url(url):
 
     print(f"Google Newsリンクのデコードに最終的に失敗したため、元のURLを使用します: {url}")
     return url  # デコード失敗時は元のURL（news.google.com）にフォールバック
+
+
+def get_entry_age_days(entry):
+    """feedparserエントリの公開日（published_parsed優先、無ければupdated_parsed）から、
+    現在時刻との差分を日数で返す。公開日が取得できない場合はNoneを返す。"""
+    time_struct = entry.get("published_parsed") or entry.get("updated_parsed")
+    if not time_struct:
+        return None
+    try:
+        published_at = datetime.fromtimestamp(time.mktime(time_struct), tz=timezone.utc)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    age = datetime.now(timezone.utc) - published_at
+    return age.total_seconds() / 86400
 
 
 def normalize_resolved_url(url):
@@ -1156,6 +1192,11 @@ def main():
                 url = entry.link
                 if url in processed_urls:
                     continue  # 重複排除（Google Newsリンクそのものでの既読チェック）
+
+                age_days = get_entry_age_days(entry)
+                if age_days is not None and age_days > ARTICLE_MAX_AGE_DAYS:
+                    print(f"公開日が{age_days:.0f}日前と古いためスキップします: {entry.title}")
+                    continue
 
                 # Google Newsのリダイレクトリンクなら実際の掲載元URLに変換する
                 resolved_url = resolve_article_url(url)
