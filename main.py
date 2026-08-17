@@ -5,6 +5,7 @@ import json
 import time
 import random
 import difflib
+import calendar
 import urllib.parse
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
@@ -594,7 +595,11 @@ def get_entry_age_days(entry):
     if not time_struct:
         return None
     try:
-        published_at = datetime.fromtimestamp(time.mktime(time_struct), tz=timezone.utc)
+        # feedparserのpublished_parsed/updated_parsedはUTC値のstruct_timeのため、
+        # ローカルタイムゾーンとして解釈するtime.mktime()ではなく、UTCとして解釈する
+        # calendar.timegm()を使う（time.mktime()だとGitHub Actions以外の環境で
+        # 実行した場合にローカルタイムゾーン分ずれる）。
+        published_at = datetime.fromtimestamp(calendar.timegm(time_struct), tz=timezone.utc)
     except (TypeError, ValueError, OverflowError):
         return None
     age = datetime.now(timezone.utc) - published_at
@@ -1011,17 +1016,21 @@ def build_goods_ad_html(category, player_name, team_name):
     if team_name and team_name in TEAM_GOODS_ADS:
         return random.choice(TEAM_GOODS_ADS[team_name])
 
-    if category in CATEGORY_GOODS_ADS:
-        ad = random.choice(CATEGORY_GOODS_ADS[category])
-        return ad["html"]
-
-    ad = random.choice(GOODS_AFFILIATE_ADS)
     if team_name:
         subject = team_name
     elif player_name:
         subject = player_name
     else:
         subject = CATEGORY_LABELS.get(category, CATEGORY_LABELS["ESPORTS"])
+
+    if category in CATEGORY_GOODS_ADS:
+        ad = random.choice(CATEGORY_GOODS_ADS[category])
+    else:
+        ad = random.choice(GOODS_AFFILIATE_ADS)
+    # CATEGORY_GOODS_ADS側のhtmlは現状{link_text}を含まないが、GOODS_AFFILIATE_ADSと
+    # 同じ.format()呼び出しに統一しておくことで、今後{link_text}プレースホルダー入りの
+    # エントリを追加した際にも正しく展開されるようにする（プレースホルダーが無い文字列に対する
+    # .format()呼び出しは無害）。
     link_text = f"{subject}関連のグッズを探すなら【{ad['name']}】"
     return ad["html"].format(link_text=link_text)
 

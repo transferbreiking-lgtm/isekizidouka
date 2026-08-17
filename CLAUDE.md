@@ -327,6 +327,14 @@ livedoor_monthly_archive.html          # 月別アーカイブテンプレート
 - **修正**（[livedoor_blog_style.css](livedoor_blog_style.css)、4テンプレートの`SetVar popularArticlesListWithImageImageWidth/Height`）：POPULARウィジェットの画像サイズを204×128から**本編と同じ120×80**に縮小。カード内では画像は120px幅の固定サイズ、カード自体（リンク・タイトル）は引き続き100%幅を保つ構成にした。
 - GitHubへコミット・プッシュ済み。**本人作業が必要**：4テンプレート＋CSSの再貼り直しと実機確認。
 
+### 4-52. カテゴリアーカイブ記事非表示の原因判明（ライブドア側の貼り付け不備）、セッション全体のバグチェック実施（2026/8/17）
+
+- 本人より「カテゴリーの記事表示されてない」との報告。生HTML調査により、全カテゴリで`<$CategoryName$>`が空・`<CategorizedArticlesLoop>`が0件出力という共通症状を確認。リポジトリ側の`livedoor_category_archive.html`は正しい内容のままだったため、**ライブドア管理画面への貼り付けが不完全だったことが原因**と判断し、全文の貼り直しを依頼。本人が貼り直したところ解消（`<title>サッカー : TransferBreaking...`が正しく表示されることを確認）。コード側の不具合ではなかった。
+- 続けて本人より「バグチェックだけして」との依頼。`code-review`スキル（high effort）で、このセッションで変更した全ファイル（main.py・backfill_articles_log.py・4テンプレート・CSS）を差分ベースでレビューし、2件のバグを発見・修正した：
+  1. **`get_entry_age_days()`のタイムゾーンバグ**（[main.py](main.py)）：feedparserが返す`published_parsed`はUTCの`struct_time`だが、`time.mktime()`はこれをローカルタイムゾーンとして誤解釈する。JST環境でシミュレーションし、9時間分ズレることを実証。現状はGitHub Actions（UTCランナー）でのみ実行されるため実害はほぼ無いが、`time.mktime()`を`calendar.timegm()`に修正（UTCとして正しく解釈させる）。
+  2. **`build_goods_ad_html()`のCATEGORY_GOODS_ADS分岐が`{link_text}`プレースホルダーを展開していなかった**（[main.py](main.py)）：`GOODS_AFFILIATE_ADS`の各エントリは`.format(link_text=...)`で選手名/チーム名を差し込む前提だが、4-47で追加した`CATEGORY_GOODS_ADS`分岐は`ad["html"]`をそのまま返しており、今後同じ書式でエントリを追加すると広告文に文字列`"{link_text}"`がそのまま出力されるバグになる状態だった。両分岐で共通のsubject算出→`.format()`呼び出しに統一して修正（プレースホルダーを含まない文字列への`.format()`呼び出しは無害なため、既存のVictoriaエントリへの影響なし）。
+- ローカルで疑似データにより、タイムゾーン非依存になったこと（UTC基準で誤差ゼロ）と`{link_text}`が展開されること・優先順位（team_name→category→フォールバック）が維持されていることを確認済み。`py_compile`構文チェックも実施済み。GitHubへコミット・プッシュ済み。
+
 ## 5. ライブドアブログ側の設定（デザイン設定 → デザイン／ブログパーツ設定 → PC → カスタマイズ）
 
 | タブ | ファイル |
