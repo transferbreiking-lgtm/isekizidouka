@@ -165,12 +165,14 @@ body {
 }
 .popularArticleWithImage .image {
     position: static !important;
-    width: 100% !important;
+    width: 120px !important;
     height: auto !important;
 }
 .popularArticleWithImage .image img {
+    /* サイドバーは補助コンテンツのため、本編（トップページ記事一覧の120x80pxサムネイル）より
+       画像が大きくなって視覚的に本編を上回らないよう、同じ120px幅に揃える（2026/8/17）。 */
     display: block;
-    width: 100% !important;
+    width: 120px !important;
     height: auto !important;
     border-radius: 2px;
     border: 1px solid var(--line-dark);
