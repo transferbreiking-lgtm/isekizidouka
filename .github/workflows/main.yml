@@ -31,6 +31,8 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           LIVEDOOR_BLOG_ID: ${{ secrets.LIVEDOOR_BLOG_ID }}
           LIVEDOOR_API_KEY: ${{ secrets.LIVEDOOR_API_KEY }}
+          GOOGLE_CSE_API_KEY: ${{ secrets.GOOGLE_CSE_API_KEY }}
+          GOOGLE_CSE_ENGINE_ID: ${{ secrets.GOOGLE_CSE_ENGINE_ID }}
         run: python main.py
 
       - name: Commit and Push processed_urls.txt / recent_topics.txt / articles_log.jsonl

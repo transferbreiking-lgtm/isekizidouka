@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import json
+import html
 import time
 import random
 import difflib
@@ -269,6 +270,11 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")  # フォールバック用（無料枠）
 LIVEDOOR_BLOG_ID = os.environ.get("LIVEDOOR_BLOG_ID")
 LIVEDOOR_API_KEY = os.environ.get("LIVEDOOR_API_KEY")
+# 「ネットの反応」セクション用：Google Custom Search JSON APIの認証情報（無料枠100クエリ/日）。
+# 未発行の間はNoneのままになり、search_sns_reaction()が即座にNoneを返して機能全体が
+# 無効化される設計（2026/8/17）。
+GOOGLE_CSE_API_KEY = os.environ.get("GOOGLE_CSE_API_KEY")
+GOOGLE_CSE_ENGINE_ID = os.environ.get("GOOGLE_CSE_ENGINE_ID")
 # チーム別カテゴリアーカイブのURL組み立てに使う独自ドメイン（末尾スラッシュ必須）
 BLOG_BASE_URL = os.environ.get("BLOG_BASE_URL", "https://transferbreaking.officialblog.jp/")
 
@@ -801,6 +807,14 @@ SUMMARY:
 - 4行のSUMMARYそれぞれで、抽象的な感情語だけで文を終わらせず、可能な限り「何が原因でその感情・評価が生まれるのか」という事実的な裏付けを一言添えてください。
 - タイトルも同様に、「新時代」「衝撃」「電撃」「悲願」など使い古された煽り語のワンパターン化を避け、その記事固有の事実（具体的な数字・対戦相手・経歴上の意味）を反映した言葉を優先してください。
 
+■ 「AIっぽさ」を消すための追加ルール（機械的な文体パターンの回避）
+- 文末を「〜だ。」「〜である。」「〜と言えるだろう。」のような同一パターンで連続させないこと。断定・体言止め・引用・短文を自然に混ぜ、単調なリズムを避ける（ただし体言止めの多用も不自然になるため、1つのSUMMARY内で2回までに留める）。
+- 「〜と言えるだろう」「〜ではないだろうか」「〜かもしれない」のような婉曲的なぼかし表現を連発しないこと。事実として言い切れることは言い切り、不確かな部分（噂・現地報道段階）だけに留める。
+- 文の冒頭を「また、」「そして、」「さらに、」「なお、」といった接続詞で始めるのは1つのSUMMARY内で1回までとし、連発しないこと。
+- 「〜することとなった」「〜において」「〜に関して」「〜を実施した」のような、翻訳調・お役所文書調の硬い言い回しを避け、実際に日本語ネイティブのスポーツライターが話し言葉に近い自然な文体で書くこと（例：「〜することとなった」→「〜することが決まった」「〜が決定した」）。
+- 全ての文がほぼ同じ文字数・同じ構造（主語→動詞→補足）にならないよう、あえて短い文と長めの文を混在させ、人間が書いたような緩急をつけること。
+- SUMMARYの4行は、極端な文字数差（一部の行だけ極端に長い・短い）を避け、各行おおよそ50〜90文字程度の分量感に収めることを目安にする（正確な文字数計算は不要だが、明らかに1行だけ2倍以上長くなるような偏りは避けること）。
+
 ■ 執筆上の禁止事項
 - 対象ニュースが外国語の場合でも、それを翻訳して要約を作ることは禁止します。翻訳ではなく、事実だけを抜き出して日本語でゼロから書き起こしてください。
 - 対象ニュースにある「～と語った」「～という」などの語尾や、見出しの発想、文章のつながり（構成）をそのまま真似してはいけません。
@@ -1035,7 +1049,86 @@ def build_goods_ad_html(category, player_name, team_name):
     return ad["html"].format(link_text=link_text)
 
 
-def compact_html_for_description(html):
+# 「ネットの反応」検索の対象サイト（優先順）。
+# 5ch: Googleにインデックスされやすく実在確認の成功率が高い。
+# Threads: Meta側がGoogle検索へのインデックスを積極的に許可しているため、Xより拾いやすい。
+# X（旧Twitter）: 近年クローラーへのアクセス制限が強く、インデックスが薄いため最後に試す（期待値は低い）。
+# （2026/8/17・ユーザーとの合意事項。架空の反応を生成することは絶対に行わず、実在する投稿の
+# 検索結果（Google Custom Search JSON APIのsnippet）が見つかった場合のみ、その引用と出典リンクを
+# 記事に追加する。見つからない場合は関数がNoneを返し、呼び出し側はセクションを丸ごと省略する。）
+SNS_REACTION_SOURCES = [
+    ("5ch.net", "5ch"),
+    ("threads.net", "Threads"),
+    ("x.com", "X（旧Twitter）"),
+]
+
+
+def search_sns_reaction(player_name, category):
+    """選手名で5ch/Threads/Xを順に検索し、実在する投稿のスニペットと出典URLを返す。
+
+    Google Custom Search JSON API（無料枠100クエリ/日）を使用。APIキー未発行の間や、
+    player_nameが取得できていない場合は即座にNoneを返し機能自体を無効化する。
+    3サイトいずれからもヒットしなければNoneを返す（呼び出し側は記事にセクションを追加しない）。
+    AIによる言い換え・生成は一切行わず、検索結果のsnippetをそのまま引用として扱う。
+    戻り値: {"label": サイト表示名, "snippet": 引用テキスト, "url": 出典URL} または None
+    """
+    if not GOOGLE_CSE_API_KEY or not GOOGLE_CSE_ENGINE_ID:
+        return None
+    if not player_name:
+        return None
+
+    for domain, label in SNS_REACTION_SOURCES:
+        query = f"site:{domain} {player_name}"
+        try:
+            response = requests.get(
+                "https://www.googleapis.com/customsearch/v1",
+                params={
+                    "key": GOOGLE_CSE_API_KEY,
+                    "cx": GOOGLE_CSE_ENGINE_ID,
+                    "q": query,
+                    "num": 1,
+                },
+                timeout=15,
+            )
+            if response.status_code != 200:
+                print(f"[SNS反応検索] {label}の検索でエラー（ステータス{response.status_code}）: {response.text[:200]}")
+                continue
+            items = response.json().get("items") or []
+            if not items:
+                continue
+            item = items[0]
+            snippet = (item.get("snippet") or "").replace("\n", " ").strip()
+            url = item.get("link", "").strip()
+            if not snippet or not url:
+                continue
+            print(f"[SNS反応検索] {label}で実在の反応を発見しました: {url}")
+            return {"label": label, "snippet": snippet, "url": url}
+        except Exception as e:
+            print(f"[SNS反応検索] {label}の検索中に例外が発生しました: {e}")
+            continue
+
+    print("[SNS反応検索] 5ch/Threads/Xいずれからも実在の反応が見つからなかったため、セクションを省略します。")
+    return None
+
+
+def build_sns_reaction_html(reaction):
+    """search_sns_reaction()の戻り値からHTMLブロックを組み立てる。reactionがNoneなら空文字を返す。
+    snippet/url/labelはすべてhtml.escape()でエスケープしてからHTMLへ埋め込み、
+    検索結果に含まれる文字列によるHTMLインジェクションを防ぐ。"""
+    if not reaction:
+        return ""
+    safe_label = html.escape(reaction["label"])
+    safe_snippet = html.escape(reaction["snippet"])
+    safe_url = html.escape(reaction["url"], quote=True)
+    return f"""
+        <div class="sns-reaction-section" style="margin-top:16px; padding:12px 14px; background:#1a1a1c; border-left:3px solid #e4002b;">
+            <div class="sns-reaction-caption" style="color:#e4002b; font-weight:bold; font-size:13px; margin-bottom:6px;">📢 ネットの反応（{safe_label}より引用）</div>
+            <p style="color:#c7c7c7; font-size:14px; line-height:1.6; margin:0 0 6px;">「{safe_snippet}」</p>
+            <a href="{safe_url}" target="_blank" rel="nofollow noopener" style="color:#8a8a8a; font-size:12px;">引用元の投稿を見る »</a>
+        </div>"""
+
+
+def compact_html_for_description(text):
     """本文HTMLの改行・インデントを1行に圧縮する。
     Livedoorの<$ArticleDescription$>（meta description自動生成タグ）はHTMLタグを除去した
     プレーンテキストをそのまま使う仕様のため、単純に全行を空白区切りで結合すると、
@@ -1044,7 +1137,7 @@ def compact_html_for_description(html):
     完全には解消していないことが2026/8/3の実機確認で判明）。
     実テキストを含む行の前にだけ区切りスペースを入れることで、タグ除去後に残る余分な空白を
     最小限にする。"""
-    lines = [line.strip() for line in html.split("\n") if line.strip()]
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
     result = ""
     seen_text = False  # 最初の実テキストの手前には区切りスペース自体を入れない（冒頭の空白を完全に無くすため）
     for line in lines:
@@ -1079,6 +1172,11 @@ def build_blog_body(category, player_name, team_name, summary_lines, source_url)
             <a href="{category_archive_url}" style="color:#e4002b; text-decoration:none; font-weight:bold;">📌 {category_label}の記事一覧はこちら »</a>
         </div>"""
 
+    # 「ネットの反応」セクション：実在する5ch/Threads/Xの投稿が見つかった場合のみ追加する
+    # （架空生成は行わない。ヒットしなければsns_reaction_htmlは空文字のまま何も表示されない）
+    sns_reaction = search_sns_reaction(player_name, category)
+    sns_reaction_html = build_sns_reaction_html(sns_reaction)
+
     blog_body = f"""
     <div class="article-outer">
         <img src="{thumbnail_url}" alt="{category}" class="article-thumbnail" style="max-width:100%; width:100%; height:auto; display:block; border:1px solid #333;" />
@@ -1086,7 +1184,7 @@ def build_blog_body(category, player_name, team_name, summary_lines, source_url)
             <ul class="summary-list">
 {summary_html}
             </ul>
-        </div>{related_html}
+        </div>{related_html}{sns_reaction_html}
         <div class="ad-section">
             <div class="ad-caption">ADVERTISEMENT</div>
             {vod_ad_html}
