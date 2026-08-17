@@ -243,7 +243,7 @@ livedoor_monthly_archive.html          # 月別アーカイブテンプレート
 ### 4-43. `seo-revenue-audit`スキルによるサイト監査、および最重要課題「投稿ごとの構造化データ永続ログ」の実装（2026/8/17）
 
 - 本人より「今後、各記事のデータを利用してTransferChronicle（Cloudflare Pages/D1版の派生サイト）を作るので、現行サイトを監査してほしい」との依頼を受け、`seo-revenue-audit`スキルで技術SEO・コンテンツSEO・収益導線・データ構造の4軸を監査。
-- **最重要の発見**：main.pyは投稿の都度`category`／`player_name`／`team_name`／`source_url`／`confidence`等の構造化フィールドを持っているにもかかわらず、**投稿完了と同時にそれらがHTML文字列に変換されてLivedoorへ送信されるだけで、どこにも永続保存されていなかった**。`processed_urls.txt`はURLの羅列のみ、`recent_topics.txt`は`DUPLICATE_TOPIC_RETENTION_DAYS`（10日）で自動的に間引かれる設計（4-26／4-34）。つまり「各記事のデータを利用してChronicleを作る」という本人の計画は、対策なしでは**Livedoorの公開HTML（2,000件超）をスクレイピングして再構築するしかない**状態だった。
+- **最重要の発見**：main.pyは投稿の都度`category`／`player_name`／`team_name`／`source_url`／`confidence`等の構造化フィールドを持っているにもかかわらず、**投稿完了と同時にそれらがHTML文字列に変換されてLivedoorへ送信されるだけで、どこにも永続保存されていなかった**。`processed_urls.txt`はURLの羅列のみ、`recent_topics.txt`は`DUPLICATE_TOPIC_RETENTION_DAYS`（10日）で自動的に間引かれる設計（4-26／4-34）。つまり「各記事のデータを利用してChronicleを作る」という本人の計画は、対策なしでは**Livedoorの公開HTMLをスクレイピングして再構築するしかない**状態だった（この時点では投稿済み記事数を「2,000件超」と見積もっていたが、これは`processed_urls.txt`の件数——大半は「移籍ニュースではない」としてスキップされたURL——を誤って投稿数と混同したもので、4-45で実際にAtomPub APIから取得した実数は137件だった）。
 - **対策実装**（[main.py](main.py)）：
   1. `ARTICLES_LOG_FILE`（`articles_log.jsonl`）を新設。`save_article_log(action, article_id, category, player_name, team_name, blog_title, summary_lines, source_url, confidence)`関数が、新規投稿成功時（`action="created"`）・記事アップデート成功時（`action="updated"`、4-34の機構と連動）の両方で、1行1記事のJSON Linesとして`timestamp`／`article_id`／`permalink`（`BLOG_BASE_URL`から組み立て）／`category`／`player_name`／`team_name`／`title`／`summary_lines`／`source_url`／`confidence`を追記する。`recent_topics.txt`と異なり**間引きを行わない永続ログ**として設計。
   2. `main()`内の2箇所（新規投稿の`send_to_blog()`成功時、記事アップデートの`update_blog_article()`成功時）に呼び出しを追加。
@@ -265,15 +265,13 @@ livedoor_monthly_archive.html          # 月別アーカイブテンプレート
 
 ### 4-45. 過去記事バックフィルスクリプト`backfill_articles_log.py`を新規作成（2026/8/17）
 
-- 4-44で「Chronicle着手を待っても、スクレイピング対象（2026/8/17より前の記事、約2,000件超）は増えない」ことを説明したところ、本人より「早めに作っておこう」との判断。`backfill_team_categories.py`と同じAtomPub全件取得パターン（`fetch_all_entries()`、`rel="next"`でのページング）を再利用し、過去記事を`articles_log.jsonl`と同一スキーマでバックフィルする専用スクリプト[backfill_articles_log.py](backfill_articles_log.py)を新規作成した。
+- 4-44で「Chronicle着手を待っても、スクレイピング対象（2026/8/17より前の記事）は増えない」ことを説明したところ、本人より「早めに作っておこう」との判断。`backfill_team_categories.py`と同じAtomPub全件取得パターン（`fetch_all_entries()`、`rel="next"`でのページング）を再利用し、過去記事を`articles_log.jsonl`と同一スキーマでバックフィルする専用スクリプト[backfill_articles_log.py](backfill_articles_log.py)を新規作成した。
 - **復元できる項目**：`article_id`／`permalink`／`category`（サムネイルのalt属性 or 1つ目の`<category>`タグから逆引き）／`team_name`（2つ目の`<category>`タグ）／`title`／`summary_lines`（本文の`<li>`要素）／`source_url`（本文末尾の「情報元」リンクを正規表現抽出）／`confidence`（main.pyの`extract_confidence_level()`をsummary_linesに適用して推定）／元記事の投稿日時（`atom:published`）。
 - **復元できない項目**：`player_name`。記事HTML上に独立したフィールドとして残っておらず機械的な確実な抽出ができないため、バックフィル分は`null`のまま出力する（Chronicle側で必要ならtitle/summary_linesのテキストから別途NLP/AI抽出する想定）。AI呼び出しは一切行わない設計のため、無料枠を消費せず何度でも安全に再実行できる。
 - `action`フィールドを`"backfilled"`とし、main.py本体が書き込む`"created"`/`"updated"`と区別できるようにした。実行前に`articles_log.jsonl`の既存`article_id`を読み込み、重複する記事は自動スキップする（何度でも再実行可能・冪等）。
-- ローカルで疑似的なAtomPub `<entry>` XML（本文HTML・カテゴリタグ2つ・出典リンク付き）を使い、`article_id`／`category`逆引き／`team_name`／`source_url`／`confidence`推定／重複スキップの各ロジックを検証済み（`py_compile`構文チェックも実施済み）。**実際のLivedoor AtomPub APIに対する本番実行は、このセッションの環境にLIVEDOOR_API_KEY等が無いため未実施**（GitHub Secretsのみに存在し、ローカルには無い）。
-- **本人作業が必要（実行手順）**：
-  1. まず`DRY_RUN`（デフォルト）で対象記事数を確認：`python backfill_articles_log.py`（LIVEDOOR_BLOG_ID/LIVEDOOR_API_KEYの環境変数が必要、`backfill_team_categories.py`と同じ実行要領）
-  2. 問題なければ本番実行：`DRY_RUN=false python backfill_articles_log.py`
-  3. 実行後、`articles_log.jsonl`に`"action": "backfilled"`のレコードが約2,000件超追加されていることを確認し、GitHubへコミット・プッシュすること（GitHub Actionsの自動コミットとは別に、手動実行分は本人が明示的にコミットする必要がある）
+- ローカルで疑似的なAtomPub `<entry>` XML（本文HTML・カテゴリタグ2つ・出典リンク付き）を使い、`article_id`／`category`逆引き／`team_name`／`source_url`／`confidence`推定／重複スキップの各ロジックを検証済み（`py_compile`構文チェックも実施済み）。
+- **✅ 同日中に本番実行も完了**：本人からLIVEDOOR_API_KEY（AtomPub用パスワード）の提供を受け、まずDRY RUNで認証・スキーマを確認（MAX_ENTRIES=5でサンプル5件を目視確認）した上で、`DRY_RUN=false`で全件バックフィルを実行。**実際にAtomPub APIから取得できた投稿済み記事の総数は137件**だった（`processed_urls.txt`の件数から見積もっていた「2,000件超」は誤りで、実際にはその大半が「移籍ニュースではない」としてAIにスキップされたURLだった。main.pyは1回の実行で最大1記事しか投稿しない設計のため、実際の公開記事数は元々そこまで多くなかった）。137件全て`articles_log.jsonl`へ`"action": "backfilled"`として追記成功（重複0件、書き込み137件）。カテゴリ内訳はSOCCER 42・BASEBALL 15・RUGBY 14・BASKETBALL 10・VOLLEYBALL 8・CRICKET 8・MOTORSPORT 8・COMBAT_SPORTS 7・AMERICAN_FOOTBALL 6・BOXING 6・WRESTLING 4・ICE_HOCKEY 4・ESPORTS 2、category=null が3件（運営者情報／プライバシーポリシー／お問い合わせの固定ページ的記事、想定通り）。GitHubへコミット・プッシュ済み。
+- これにより、**TransferBreakingの投稿済み記事は2026/8/17時点で全件（137件）が`articles_log.jsonl`に構造化データとして揃った状態**になった。4-43で残っていた「過去記事データの扱い」の積み残しは解消。
 
 ## 5. ライブドアブログ側の設定（デザイン設定 → デザイン／ブログパーツ設定 → PC → カスタマイズ）
 
