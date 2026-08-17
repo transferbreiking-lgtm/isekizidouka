@@ -166,6 +166,10 @@ body {
     border-radius: 2px;
 }
 .popularArticleWithImage .title {
+    /* 3行で切り詰めるwebkit-line-clampハックはブラウザによって適用が不安定で、
+       意図通りに機能しない場合にタイトルの途中が見えなくなる問題があったため
+       採用しない（2026/8/17）。高さを完全に自動にして、タイトル全文を折り返し
+       表示することで確実に全文を読めるようにする。 */
     position: static !important;
     width: auto !important;
     height: auto !important;
@@ -175,10 +179,10 @@ body {
     background-color: transparent !important;
     font-size: 12px;
     line-height: 1.4;
-    display: -webkit-box !important;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden !important;
+    display: block !important;
+    overflow: visible !important;
+    white-space: normal !important;
+    word-break: break-word;
 }
 
 /* サイドバーAD枠。記事下部の.ad-sectionと同じトーンで、サイドバーの実効ボリュームを
