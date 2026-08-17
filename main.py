@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import json
 import time
 import random
 import difflib
@@ -238,6 +239,11 @@ DB_FILE = "processed_urls.txt"
 # processed_urls.txt（URL単位の既読管理）だけでは、別掲載元・別URLの記事を防げないため、
 # 「カテゴリ＋選手名」という記事の中身ベースで直近の投稿を記録する（2026/8/8・4-26参照）。
 RECENT_TOPICS_FILE = "recent_topics.txt"
+
+# 投稿・更新した記事の構造化データ（カテゴリ・選手名・チーム名・タイトル・要約・出典・確度・
+# ライブドア記事ID/パーマリンク）を1行1記事のJSON Linesで永続保存するログ。上記2ファイルと違い
+# 間引きは行わない（TransferChronicle等、将来の派生サイトでの記事データ流用を見据えた保存用途）。
+ARTICLES_LOG_FILE = "articles_log.jsonl"
 # 同一カテゴリ・同一選手（類似含む）の記事を「重複」とみなす期間。
 # 短すぎると数時間ちがいの続報を取りこぼし、長すぎると噂→公式発表のような正当な続報まで
 # ブロックしてしまうため、実際に観測された重複間隔（1日）を踏まえて4日に設定。
@@ -647,6 +653,32 @@ def prune_recent_topics(topics):
     if len(kept) != len(topics):
         _write_recent_topics(kept)
     return kept
+
+
+def save_article_log(action, article_id, category, player_name, team_name, blog_title, summary_lines, source_url, confidence):
+    """投稿・更新した記事の構造化データをJSON Lines形式で永続保存する。
+
+    processed_urls.txt（URLのみ）・recent_topics.txt（10日で間引かれる）は、どちらも
+    「その記事がどんなカテゴリ・選手・要約で生成されたか」を後から引ける形では残していなかった。
+    将来Cloudflare Pages/D1版の派生サイト「TransferChronicle」で過去記事データを流用する際、
+    Livedoorの公開HTMLをスクレイピングし直す以外に手段が無い状態だったため、投稿の都度この
+    ログファイルに1行1記事のJSONを追記する方式で解消する（2026/8/17・seo-revenue-audit参照）。
+    articles_log.jsonlは間引きを行わない永続ログとして扱う。"""
+    record = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "action": action,  # "created" または "updated"
+        "article_id": article_id,
+        "permalink": f"{BLOG_BASE_URL}archives/{article_id}.html" if article_id else None,
+        "category": category,
+        "player_name": player_name,
+        "team_name": team_name,
+        "title": blog_title,
+        "summary_lines": summary_lines,
+        "source_url": source_url,
+        "confidence": confidence,
+    }
+    with open(ARTICLES_LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
 def save_recent_topic(category, player_name, confidence="UNKNOWN", article_id=None):
@@ -1254,6 +1286,7 @@ def main():
                         blog_body = build_blog_body(category, player_name, team_name, summary_lines, resolved_url)
                         if update_blog_article(old_article_id, blog_title, blog_body, category, team_name=team_name):
                             update_recent_topic_record(matched_topic, category, player_name, new_confidence, old_article_id)
+                            save_article_log("updated", old_article_id, category, player_name, team_name, blog_title, summary_lines, resolved_url, new_confidence)
                             print(
                                 f"[記事アップデート] 確度が {old_confidence}→{new_confidence} に上がったため、"
                                 f"新規投稿せず記事ID {old_article_id} を更新しました: {blog_title}"
@@ -1280,8 +1313,10 @@ def main():
                     save_processed_url(url)
                     if resolved_url != url:
                         save_processed_url(resolved_url)
+                    confidence = extract_confidence_level(summary_lines)
                     if player_name:
-                        save_recent_topic(category, player_name, extract_confidence_level(summary_lines), article_id)
+                        save_recent_topic(category, player_name, confidence, article_id)
+                    save_article_log("created", article_id, category, player_name, team_name, blog_title, summary_lines, resolved_url, confidence)
                     print("1件の配信処理が正常終了したため、スクリプトを終了します。")
                     sys.exit(0)
                 else:

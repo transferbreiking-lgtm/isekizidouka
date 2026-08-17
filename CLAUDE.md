@@ -238,6 +238,22 @@ livedoor_monthly_archive.html          # 月別アーカイブテンプレート
 - 本人より「記事ページのSNSへのリンクがライブドアのものと作成したものと被ってる」との指摘。4-22で`livedoor_article_page.html`の`<$ArticleToolBox$>`直後に独自のX/LINEシェアボタン（`.sns-share`）を追加済みだが、それとは別に**ライブドア管理画面側の「ソーシャルボタン」等の公式機能が有効になっており、二重表示になっている**と推測される（テンプレート側のコードは4-22時点から変更していないため、原因はライブドア管理画面の設定側にあると考えられる）。
 - **本人判断**：自作ボタン（X/LINE、`.sns-share`）を残し、ライブドア公式のソーシャルボタン機能をオフにする方針で決定。
 - **未対応（本人作業が必要）**：ライブドア管理画面のブログ設定（デザイン設定内、または「基本設定」内の「ソーシャルボタン」「SNS連携」等の項目を探す想定）から公式のシェアボタン表示をオフにすること。この設定はテンプレートHTMLのコードではなく管理画面のトグル設定と推測されるため、リポジトリ側の追加修正は不要な可能性が高い。次回、実機で該当設定項目を探して報告してもらい、見つからない場合はスクリーンショットで一緒に確認する。
+- **✅ 2026/8/17追記**：本人が公式ソーシャルボタン設定をオフにした後、実際の記事ページ生HTML（`archives/14380754.html`）を再取得して確認したところ、`.sns-share`（自作X/LINEボタン）のみが存在し、公式ボタンの重複マークアップは見当たらなかった。解消済みと判断できる。
+
+### 4-43. `seo-revenue-audit`スキルによるサイト監査、および最重要課題「投稿ごとの構造化データ永続ログ」の実装（2026/8/17）
+
+- 本人より「今後、各記事のデータを利用してTransferChronicle（Cloudflare Pages/D1版の派生サイト）を作るので、現行サイトを監査してほしい」との依頼を受け、`seo-revenue-audit`スキルで技術SEO・コンテンツSEO・収益導線・データ構造の4軸を監査。
+- **最重要の発見**：main.pyは投稿の都度`category`／`player_name`／`team_name`／`source_url`／`confidence`等の構造化フィールドを持っているにもかかわらず、**投稿完了と同時にそれらがHTML文字列に変換されてLivedoorへ送信されるだけで、どこにも永続保存されていなかった**。`processed_urls.txt`はURLの羅列のみ、`recent_topics.txt`は`DUPLICATE_TOPIC_RETENTION_DAYS`（10日）で自動的に間引かれる設計（4-26／4-34）。つまり「各記事のデータを利用してChronicleを作る」という本人の計画は、対策なしでは**Livedoorの公開HTML（2,000件超）をスクレイピングして再構築するしかない**状態だった。
+- **対策実装**（[main.py](main.py)）：
+  1. `ARTICLES_LOG_FILE`（`articles_log.jsonl`）を新設。`save_article_log(action, article_id, category, player_name, team_name, blog_title, summary_lines, source_url, confidence)`関数が、新規投稿成功時（`action="created"`）・記事アップデート成功時（`action="updated"`、4-34の機構と連動）の両方で、1行1記事のJSON Linesとして`timestamp`／`article_id`／`permalink`（`BLOG_BASE_URL`から組み立て）／`category`／`player_name`／`team_name`／`title`／`summary_lines`／`source_url`／`confidence`を追記する。`recent_topics.txt`と異なり**間引きを行わない永続ログ**として設計。
+  2. `main()`内の2箇所（新規投稿の`send_to_blog()`成功時、記事アップデートの`update_blog_article()`成功時）に呼び出しを追加。
+  3. `.github/workflows/main.yml`のコミット対象に`articles_log.jsonl`を追加（`processed_urls.txt`／`recent_topics.txt`と同様、GitHub Actions実行の最終ステップで自動コミット・プッシュされる）。リポジトリに空の`articles_log.jsonl`を先にコミットし、初回実行時の`git add`失敗を防止。
+- ローカルで一時ディレクトリ上に疑似データを書き込み、JSON Linesとして正しくパースできること・`created`/`updated`両アクションが記録されること・パーマリンクが正しく組み立てられることを確認済み。`py_compile`での構文チェックも実施済み。
+- **監査で洗い出したその他の項目**（`articles_log.jsonl`実装ほど緊急ではないため、今回は診断のみで実装は保留）：
+  - NewsArticleのJSON-LD構造化データ（`datePublished`/`dateModified`）が、JS実行前の生HTMLでは日本語表記（例：`2026年08月09日`）のままで、ISO 8601形式への変換はクライアントサイドJS依存（4-19／4-33で既知のリスク）。今回、実際の生HTML取得で改めて再現を確認。Googlebotがレンダリング前にインデックスした場合、リッチリザルト対象外になるリスクは未解消のまま。
+  - `robots.txt`が404（Livedoor無料プランの仕様上、独自設置ができない可能性が高く対応不可と推測されるが記録として残す）。
+  - カテゴリアーカイブページのmeta descriptionは「監査中に一度WebFetchの要約で『無い』と誤検知したが、生HTML（`curl`）で再確認したところ実際には実装済みだった」ことが判明。WebFetchはmarkdown変換時に`<head>`タグ内容を省略する場合があるため、今後同様の技術SEO調査では**生HTML（`curl`）での裏取りを必須とする**教訓を得た。
+- **未検証・次回確認事項**：本番のGitHub Actions実行で`articles_log.jsonl`が実際に想定通り追記され、コミット・プッシュされるか（次回投稿後にリポジトリの当該ファイルを確認すること）。過去（2026/8/17以前）に投稿済みの記事分については、この永続ログには載らないため、TransferChronicle側でその期間のデータをどう扱うか（スクレイピングで復元する／Chronicle開始日以降のみで運用する）は本人判断が必要な積み残し事項として残る。
 
 ## 5. ライブドアブログ側の設定（デザイン設定 → デザイン／ブログパーツ設定 → PC → カスタマイズ）
 

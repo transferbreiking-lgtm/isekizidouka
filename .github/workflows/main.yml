@@ -33,9 +33,9 @@ jobs:
           LIVEDOOR_API_KEY: ${{ secrets.LIVEDOOR_API_KEY }}
         run: python main.py
 
-      - name: Commit and Push processed_urls.txt / recent_topics.txt
+      - name: Commit and Push processed_urls.txt / recent_topics.txt / articles_log.jsonl
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@github.com"
-          git add processed_urls.txt recent_topics.txt
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update processed_urls.txt / recent_topics.txt [skip ci]" && git push)
+          git add processed_urls.txt recent_topics.txt articles_log.jsonl
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update processed_urls.txt / recent_topics.txt / articles_log.jsonl [skip ci]" && git push)
