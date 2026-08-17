@@ -222,6 +222,11 @@ livedoor_monthly_archive.html          # 月別アーカイブテンプレート
 - ローカルで疑似データ（`build_google_news_rss`の出力に除外ドメインが含まれるか、300日前/1日前/日付なしのfeedparserエントリで`get_entry_age_days`が期待通りの値を返すか）を検証済み。`py_compile`での構文チェックも実施済み。
 - **未検証**：本番投稿での実際の効果（除外ドメインのヒット数減少、鮮度フィルタによるスキップ件数）は次回以降のGitHub Actions実行ログで確認が必要。`ARTICLE_MAX_AGE_DAYS=10`という日数は初期値であり、噂→公式発表のような正当な続報まで誤って弾いていないか（4-34の記事アップデート機構との組み合わせ）も要観察。
 
+### 4-40. eスポーツ専用バナー画像の差し替え完了（2026/8/17）
+
+- 4-24で新設したESPORTSカテゴリーは、バナー未作成のため`THUMBNAIL_IMAGES["ESPORTS"]`が旧OTHER用バナーを暫定流用したままだった（積み残し事項）。
+- 本人がeスポーツ専用バナーをライブドアへアップロード済み（`https://livedoor.blogimg.jp/transfer_breiking/imgs/c/1/c1d4eda0.jpg`）。`main.py`の`THUMBNAIL_IMAGES["ESPORTS"]`（[main.py:307](main.py:307)）をこの新バナーのURLに差し替え、TODOコメントを削除した。
+
 ## 5. ライブドアブログ側の設定（デザイン設定 → デザイン／ブログパーツ設定 → PC → カスタマイズ）
 
 | タブ | ファイル |

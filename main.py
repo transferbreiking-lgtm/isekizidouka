@@ -303,8 +303,7 @@ THUMBNAIL_IMAGES = {
     "RUGBY": "https://livedoor.blogimg.jp/transfer_breiking/imgs/7/2/725eb216.png",
     "CRICKET": "https://livedoor.blogimg.jp/transfer_breiking/imgs/f/6/f67875e2.jpg",
     "MOTORSPORT": "https://livedoor.blogimg.jp/transfer_breiking/imgs/a/b/ab625684.jpg",
-    # TODO: eスポーツ専用バナーをライブドアにアップロードし、このURLを差し替えること（それまでは旧OTHER用バナーを暫定流用）
-    "ESPORTS": "https://livedoor.blogimg.jp/transfer_breiking/imgs/0/f/0f2ab819.jpg",
+    "ESPORTS": "https://livedoor.blogimg.jp/transfer_breiking/imgs/c/1/c1d4eda0.jpg?v=20260817111921",
 }
 
 # 競技カテゴリごとのアフィリエイト広告（ad-sectionに表示するリンク）
