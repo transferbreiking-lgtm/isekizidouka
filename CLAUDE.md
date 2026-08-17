@@ -273,6 +273,18 @@ livedoor_monthly_archive.html          # 月別アーカイブテンプレート
 - **✅ 同日中に本番実行も完了**：本人からLIVEDOOR_API_KEY（AtomPub用パスワード）の提供を受け、まずDRY RUNで認証・スキーマを確認（MAX_ENTRIES=5でサンプル5件を目視確認）した上で、`DRY_RUN=false`で全件バックフィルを実行。**実際にAtomPub APIから取得できた投稿済み記事の総数は137件**だった（`processed_urls.txt`の件数から見積もっていた「2,000件超」は誤りで、実際にはその大半が「移籍ニュースではない」としてAIにスキップされたURLだった。main.pyは1回の実行で最大1記事しか投稿しない設計のため、実際の公開記事数は元々そこまで多くなかった）。137件全て`articles_log.jsonl`へ`"action": "backfilled"`として追記成功（重複0件、書き込み137件）。カテゴリ内訳はSOCCER 42・BASEBALL 15・RUGBY 14・BASKETBALL 10・VOLLEYBALL 8・CRICKET 8・MOTORSPORT 8・COMBAT_SPORTS 7・AMERICAN_FOOTBALL 6・BOXING 6・WRESTLING 4・ICE_HOCKEY 4・ESPORTS 2、category=null が3件（運営者情報／プライバシーポリシー／お問い合わせの固定ページ的記事、想定通り）。GitHubへコミット・プッシュ済み。
 - これにより、**TransferBreakingの投稿済み記事は2026/8/17時点で全件（137件）が`articles_log.jsonl`に構造化データとして揃った状態**になった。4-43で残っていた「過去記事データの扱い」の積み残しは解消。
 
+### 4-46. `seo-competitor-analysis`による収益導線・集客・レイアウト検証、および即実装2件の対応（2026/8/17）
+
+- 本人より「記事下の収益化導線は妥当か」「アクセスを増やすには」「トップ/記事/アーカイブのレイアウトは正しいか」の3点検証を依頼され、`seo-competitor-analysis`スキルでGoal.com Japan／SPORTS BULL／Full-Count／Qolyを個別調査。加えて自サイトをブラウザのJS実行で実測し、技術的な問題を発見した。
+- **最重要の発見（レイアウト）**：`.page-layout`はflexで正しく2カラム実装されているが、**サイドバー（13カテゴリのリストのみ）の高さが本文コンテンツより大幅に短い**ことを実測で確認（個別記事ページ：本文2,111px vs サイドバー642px）。記事下3分の2は右側が空白のまま流れる設計になっていた。Full-Count等の競合は「特集連載」「Podcast」「関連メディア」等でサイドバーを本文と同じ長さまで積み増している。
+- **収益導線**：ABEMA1本＋物販1本の2段構成自体は妥当だが、収益源が実質ABEMA（A8.net）1本に依存している点が最大のリスクと指摘。DAZN/U-NEXT系ASPの再挑戦（6章9番）の優先度見直しを提案。
+- **集客**：競合と比べてTransferBreakingに欠けている3チャネル（SNS運用・ニュース配信プラットフォーム掲載・サイドバーの回遊導線）を指摘。
+- **即実装した2件**：
+  1. **サイドバーのsticky化**：[livedoor_blog_style.css](livedoor_blog_style.css)の`.sidebar`に`position: sticky; top: 16px;`を追加。スマホ幅（`max-width:680px`、本文の下に回るレイアウト）では`position: static`で無効化し、不自然な挙動を防止。
+  2. **サイドバーへの「人気記事」ウィジェット追加**：Web調査でLivedoorの公式タグ`<$PopularArticlesWithImageList$>`（完全カスタムHTML編集モード内に直接記述可能）の存在を確認。`<SetVar popularArticlesListWithImageCount>5</SetVar>`等で件数・画像サイズを指定し、4テンプレート（トップ・個別記事・カテゴリアーカイブ・月別アーカイブ）のサイドバー最上段（CATEGORIESより上）に追加。GitHubへコミット・プッシュ済み。
+- **見送った1件**：物販広告への「選手名で動的検索するAmazon/楽天リンク」を提案したが、実装直前に**Amazon アソシエイト・楽天アフィリエイトとも未提携**（[main.py:1027](main.py:1027)のコメント通り）であり、かつ4-20で確認済みの通りA8.net経由でも動的キーワード検索リンクは生成不可（手動の個別商品リンク作成のみ）と判明したため撤回。本人と協議の上、代替として**GOODS_AFFILIATE_ADSへのA8.net提携店舗追加**を進める方針に変更したが、これは本人がA8.net管理画面で実在の提携店舗コード（`a8mat=...`）を確認・提供する必要があり、**次回以降の対応待ち**。
+- **本人作業が必要**：4テンプレートの修正をライブドア管理画面へ貼り直すこと。反映後、`<$PopularArticlesWithImageList$>`が実際にどう表示されるか（画像・件数・スタイルの見た目）を実機確認し、必要ならCSSで微調整すること（このタグの出力HTML構造は事前に確認できなかったため、想定通りのデザインにならない可能性がある）。
+
 ## 5. ライブドアブログ側の設定（デザイン設定 → デザイン／ブログパーツ設定 → PC → カスタマイズ）
 
 | タブ | ファイル |

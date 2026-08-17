@@ -83,6 +83,14 @@ body {
 }
 .sidebar {
     flex: 0 0 240px;
+    /* コンテンツの方がサイドバーより丈が長いページ（特に個別記事）で、サイドバーが
+       途中で終わって下3分の2が空白になる問題への対策。スクロール追従させることで
+       常にサイドバーが画面内に留まるようにする（2026/8/17）。 */
+    position: sticky;
+    top: 16px;
+}
+.sidebar-box + .sidebar-box {
+    margin-top: 16px;
 }
 .sidebar-box {
     background-color: var(--card-bg);
@@ -132,6 +140,7 @@ body {
     .sidebar {
         flex-basis: auto;
         width: 100%;
+        position: static; /* スマホでは本文の下に回るため、sticky追従は不要（不自然な挙動になるため無効化） */
     }
 }
 
